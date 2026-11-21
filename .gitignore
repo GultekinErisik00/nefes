@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Debian paketleme çıktıları
+debian/.debhelper/
+debian/nefes/
+debian/files
+debian/*.substvars
+debian/*.log
+*.deb
+*.buildinfo
+*.changes
+
+# Ölçüm ham verisi (büyükse) — özet CSV'ler ayrıca commitlenir
+nefes_olcum/ham/
+
+# Obsidian: kişisel çalışma alanı durumu paylaşılmaz
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/
+
+# macOS
+.DS_Store
+
+# Öneri belgesi öğrenci numaraları içeriyor; açık depoya konmaz (yerelde kalır)
+*_Proje_Onerisi.pdf
