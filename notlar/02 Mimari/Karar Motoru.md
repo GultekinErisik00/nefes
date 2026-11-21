@@ -29,12 +29,32 @@ decide(snapshot: list[AppCgroup], focus: str | None, protected: set[str],
 | 2 | tetikleyici | dondur + `memory.reclaim` |
 | 3 | Seviye 2 sonrası N sn baskı sürüyor ve aday kalmadı | bildirerek en büyük donmuşu sonlandır (varsayılan: kapalı?) |
 
+## Uygulama (2026-11-21) — `nefesd/karar.py`, testler `tests/test_karar.py` (35 test, TDD)
+Gerçek arayüz yukarıdaki taslaktan sadeleşti:
+```python
+decide(snapshot: Snapshot, policy: Policy) -> tuple[Freeze | Thaw, ...]
+Snapshot(apps, focus_path: str | None, focus_known: bool, pressure: Pressure, now: float)
+AppCgroup(path, memory_current, frozen_since: float | None)   # path = /proc/PID/cgroup biçimi
+Policy(uid, protected_names: frozenset[str], max_frozen_seconds, min_candidate_bytes)
+Pressure: NORMAL | HIGH | SAFE
+```
+Tur sırası: önce zorunlu çözmeler (`focus`, `timeout`), sonra baskı eylemi (HIGH → en büyük adayı dondur; SAFE → en uzun donuk olanı çöz, turda tek). Seviye 1 (`memory.high`) ve Seviye 3 (sonlandırma) henüz yok.
+
+**Kod incelemesi (python-reviewer) sonrası düzeltilenler:** yol doğrulaması regex yerine parça parça (`..`, `.`, satır sonu, ASCII dışı rakam, başka uid, scope içinde scope reddedilir); korunan ad app.slice altındaki **her** parçada aranır; `focus_known=False` → hiç dondurma yok; aynı yol iki kez gelirse tek eylem.
+
+## Daemon'ın (eylem.py) üstlenmesi gerekenler — incelemeden
+- [ ] **Zamanlayıcı:** PSI olay tabanlı → baskı yokken `decide` hiç çağrılmaz, `timeout` çözmesi kaçar. Donuk uygulama varken en yakın son tarihe göre uyanan bir zamanlayıcı şart.
+- [ ] **Monoton saat:** `now`/`frozen_since` için `time.monotonic()`; duvar saati geri atlarsa çözme olmaz.
+- [ ] **Bekleme süresi (cooldown):** zaman aşımıyla çözülen uygulama hemen yeniden dondurulabilir → toplam donukluk sınırsız. Son çözülme zamanını tutup N sn aday dışı bırak (AppCgroup'a alan eklenebilir).
+- [ ] **Yeniden başlatma:** servis açılışta `cgroup.events` içinde `frozen 1` olan her şeyi çözmeli (frozen_since bilinmez).
+
 ## Zorunlu birim testleri (M6)
-- [ ] odaktaki uygulama en büyük olsa bile seçilmez
-- [ ] korunan listedeki hiçbir şey seçilmez
-- [ ] `app.slice` dışı cgroup seçilmez
-- [ ] aday yoksa `NoOp`
-- [ ] azami dondurma süresi dolan → `Thaw`
-- [ ] odak donmuş uygulamaya geçerse → anında `Thaw`
+- [x] odaktaki uygulama en büyük olsa bile seçilmez (odak alt cgroup'ta olsa bile)
+- [x] korunan listedeki hiçbir şey seçilmez
+- [x] `app.slice` dışı cgroup seçilmez (`session-2.scope`, `session.slice`, benzer görünen sahte yol)
+- [x] aday yoksa boş eylem
+- [x] azami dondurma süresi dolan → `Thaw(timeout)` (yüksek baskıda bile)
+- [x] odak donmuş uygulamaya geçerse → anında `Thaw(focus)`
+- [x] baskı güvenli → en uzun donuk olan tek uygulama `Thaw(pressure_low)`
 
 Açık soru: Seviye 3 varsayılan açık mı kapalı mı? → [[Kararlar]]

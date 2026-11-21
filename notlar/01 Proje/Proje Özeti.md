@@ -13,7 +13,7 @@ Memur: Firefox (15 sekme) + Calc (büyük tablo) + video konferans. Pivot tablo 
 
 ## Net katkı (özgün kısım = politika + kullanıcı deneyimi)
 1. **Dondur + geri kazan + devam ettir** — dondurmak tek başına RAM boşaltmaz; [[cgroup v2#cgroup.freeze]] + [[memory.reclaim]] birlikte çekirdek fikirdir.
-2. **Odak farkındalığı** — odaktaki uygulama asla dondurulmaz (GNOME Shell eklentisi → D-Bus).
+2. **Odak farkındalığı** — odaktaki uygulama asla dondurulmaz (Xfce/X11'de `_NET_ACTIVE_WINDOW` → nefes-agent → D-Bus; öneride GNOME Shell eklentisiydi → [[ADR-0002 Asgari ürün Xfce]]).
 3. **Kademeli eylem** — Seviye 1 `memory.high` (ek), Seviye 2 dondur+geri kazan, Seviye 3 bildirerek en büyük donmuşu sonlandır (yapılandırılabilir).
 4. **Güvenli aday seçimi** — yalnızca `app.slice` scope'ları; kesin korunan liste.
 5. Türkçe bildirim, tek tık devam ettirme, sıfır yapılandırma.

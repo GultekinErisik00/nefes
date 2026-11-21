@@ -4,7 +4,7 @@ tags: [nefes, olcum]
 # Başarı Ölçütleri
 
 ## Test düzeni
-- Pardus 25 GNOME VM: **4 GB RAM, 2 vCPU** (+ mümkünse 4 GB'lık eski dizüstü)
+- Pardus 25 **Xfce** VM: **4 GB RAM, 2 vCPU** (+ mümkünse 4 GB'lık eski dizüstü) — şu an `userpardus` 2 GB / 1 vCPU, yükseltilecek ([[Test Ortamı]])
 - Yük: yerel kaydedilmiş sayfalarla 20 sekmeli Firefox + büyük Calc dosyası + belleği kademeli tüketen betik (stress-ng / kendi sızıntı benzetimi)
 - Yapılandırmalar: **varsayılan Pardus · earlyoom · Nefes** — her biri **5 tekrar**, ortalama ± standart sapma
 

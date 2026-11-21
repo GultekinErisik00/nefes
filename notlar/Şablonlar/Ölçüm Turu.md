@@ -7,7 +7,7 @@ tekrar:
 # Ölçüm turu — {{date}}
 
 ## Ortam
-- VM: 4 GB RAM, 2 vCPU · Pardus 25 GNOME · çekirdek: 
+- VM: 4 GB RAM, 2 vCPU · Pardus 25 Xfce · çekirdek: 
 - zram: · swap: · swappiness: 
 - Nefes sürümü / commit: 
 - Yük: Firefox 20 sekme + Calc + 

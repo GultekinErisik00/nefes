@@ -29,5 +29,8 @@ nefes_olcum/ham/
 # macOS
 .DS_Store
 
+# graphify çıktısı (yeniden üretilebilir: /graphify)
+graphify-out/
+
 # Öneri belgesi öğrenci numaraları içeriyor; açık depoya konmaz (yerelde kalır)
 *_Proje_Onerisi.pdf
