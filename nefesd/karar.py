@@ -121,7 +121,7 @@ def _is_focused(app: AppCgroup, focus_path: str | None) -> bool:
     return focus_path == app.path or focus_path.startswith(app.path + "/")
 
 
-def _app_slice_components(path: str, uid: int) -> tuple[str, ...] | None:
+def app_scope_parts(path: str, uid: int) -> tuple[str, ...] | None:
     """app.slice altındaki yol parçaları; yol geçerli bir uygulama scope'u değilse None.
 
     Geçerli: /user.slice/user-UID.slice/user@UID.service/app.slice/[*.slice/]*NAME.scope
@@ -140,7 +140,7 @@ def _app_slice_components(path: str, uid: int) -> tuple[str, ...] | None:
 
 
 def _is_unprotected_app_scope(path: str, policy: Policy) -> bool:
-    parts = _app_slice_components(path, policy.uid)
+    parts = app_scope_parts(path, policy.uid)
     if parts is None:
         return False
     return not any(name in part for part in parts for name in policy.protected_names)
