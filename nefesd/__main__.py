@@ -10,6 +10,8 @@ import argparse
 import logging
 import math
 import os
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 import select
 import signal
 import sys
@@ -68,17 +70,33 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="nefesd", description="Donma önleyici bellek baskısı servisi")
     p.add_argument("--root", type=Path, default=Path("/sys/fs/cgroup"))
     p.add_argument("--uid", type=int, default=os.getuid())
-    p.add_argument("--stall-ms", type=int, default=150, help="pencerede bu kadar bekleme → baskı")
+    p.add_argument("--stall-ms", type=int, default=300,
+                   help="pencerede bu kadar bekleme → baskı (150 ms kısa ayırma dalgalarında tetikledi, Deney 03)")
     p.add_argument("--window-ms", type=int, default=2000, help="PSI penceresi (root değilse 2 sn'nin katı)")
     p.add_argument("--max-frozen", type=float, default=600.0, help="azami dondurma süresi (s)")
     p.add_argument("--cooldown", type=float, default=60.0)
-    p.add_argument("--safe-below", type=float, default=1.0, help="some avg10 bunun altında → güvenli")
+    p.add_argument("--safe-below", type=float, default=5.0,
+                   help="some avg10 bunun altında → güvenli (1.0 çözmeyi 30 s+ geciktirdi, Deney 03)")
     p.add_argument("--min-candidate-mb", type=int, default=50)
     p.add_argument("--log-level", default="INFO")
     return p.parse_args(argv)
 
 
-def build_daemon(args: argparse.Namespace) -> Daemon:
+def background(executor: ThreadPoolExecutor) -> Callable[[Callable[[], None]], None]:
+    """Daemon.run_async: işi tek iş parçacıklı kuyruğa atar; beklenmeyen hata kaybolmasın diye loglar."""
+
+    def report(future: Future) -> None:
+        if not future.cancelled() and future.exception() is not None:
+            log.error("arka plan işi başarısız", exc_info=future.exception())
+
+    def submit(job: Callable[[], None]) -> None:
+        executor.submit(job).add_done_callback(report)
+
+    return submit
+
+
+def build_daemon(args: argparse.Namespace,
+                 run_async: Callable[[Callable[[], None]], None] | None = None) -> Daemon:
     config = Config(
         policy=Policy(uid=args.uid, protected_names=PROTECTED,
                       max_frozen_seconds=args.max_frozen,
@@ -88,7 +106,7 @@ def build_daemon(args: argparse.Namespace) -> Daemon:
         safe_check_seconds=2.0,
     )
     return Daemon(config, CgroupOps(args.root, args.uid), clock=time.monotonic,
-                  focus=X11Focus(), notify=log_event)
+                  focus=X11Focus(), notify=log_event, run_async=run_async)
 
 
 def poll_ms(seconds: float | None) -> int | None:
@@ -99,7 +117,8 @@ def poll_ms(seconds: float | None) -> int | None:
 
 
 def run(args: argparse.Namespace) -> int:
-    daemon = build_daemon(args)
+    reclaimer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nefes-reclaim")
+    daemon = build_daemon(args, run_async=background(reclaimer))
     fd = os.open(PSI_FILE, os.O_RDWR | os.O_NONBLOCK)
     os.write(fd, trigger_line("some", args.stall_ms * 1000, args.window_ms * 1000))
     poller = select.poll()
@@ -137,6 +156,7 @@ def run(args: argparse.Namespace) -> int:
         # Kapanırken ikinci bir sinyal çözme döngüsünü yarıda kesmesin.
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        reclaimer.shutdown(wait=False, cancel_futures=True)  # bekleyen geri kazanımlar iptal
         daemon.shutdown()
         os.close(fd)
         left = daemon.frozen_paths()

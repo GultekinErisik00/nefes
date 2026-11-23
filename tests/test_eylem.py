@@ -67,9 +67,25 @@ class Clock:
         return self.t
 
 
-def make(apps, focus=(None, True), **kw):
+class Deferred:
+    """Arka plan iş kuyruğu yerine geçer: işleri tutar, run() ile çalıştırır."""
+
+    def __init__(self):
+        self.jobs = []
+
+    def __call__(self, job):
+        self.jobs.append(job)
+
+    def run(self):
+        jobs, self.jobs = self.jobs, []
+        for job in jobs:
+            job()
+
+
+def make(apps, focus=(None, True), run_async=None, **kw):
     ops, clock, events = FakeOps(apps, **kw), Clock(), []
-    daemon = Daemon(CONFIG, ops, clock=clock, focus=lambda: focus, notify=events.append)
+    extra = {"run_async": run_async} if run_async is not None else {}
+    daemon = Daemon(CONFIG, ops, clock=clock, focus=lambda: focus, notify=events.append, **extra)
     return daemon, ops, clock, events
 
 
@@ -88,6 +104,37 @@ def test_frozen_app_is_not_frozen_twice_while_pressure_continues():
     clock.t += 30
     assert daemon.tick(fired=True, some_avg10=30.0) == ()
     assert ops.calls.count(("freeze", FIREFOX)) == 1
+
+
+def test_tick_returns_after_freeze_and_reclaim_runs_in_background():
+    deferred = Deferred()
+    daemon, ops, _, events = make({FIREFOX: 900 * MB}, run_async=deferred)
+    assert daemon.tick(fired=True, some_avg10=30.0) == (Freeze(FIREFOX),)
+    assert ops.calls == [("freeze", FIREFOX)]  # reclaim henüz yok: döngü bloklanmadı
+    assert daemon.frozen_paths() == (FIREFOX,)
+    assert events == []
+    deferred.run()
+    assert ops.calls[-1] == ("reclaim", FIREFOX, 900 * MB)
+    assert events == [Event("frozen", FIREFOX, "pressure", 898 * MB)]
+
+
+def test_background_reclaim_of_an_app_that_exited_neither_crashes_nor_notifies():
+    deferred = Deferred()
+    daemon, ops, _, events = make({FIREFOX: 900 * MB}, run_async=deferred)
+    daemon.tick(fired=True, some_avg10=30.0)
+    ops.gone.add(FIREFOX)
+    deferred.run()
+    assert events == []
+
+
+def test_background_reclaim_error_still_notifies_with_zero_reclaimed():
+    deferred = Deferred()
+    daemon, ops, _, events = make({FIREFOX: 900 * MB}, run_async=deferred)
+    daemon.tick(fired=True, some_avg10=30.0)
+    ops.fail[("reclaim", FIREFOX)] = errno.EIO
+    deferred.run()
+    assert events == [Event("frozen", FIREFOX, "pressure", 0)]
+    assert daemon.frozen_paths() == (FIREFOX,)
 
 
 def test_scope_that_exits_during_freeze_is_ignored():

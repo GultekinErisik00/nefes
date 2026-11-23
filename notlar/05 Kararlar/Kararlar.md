@@ -17,5 +17,5 @@ Yeni karar: `Şablonlar/Karar (ADR)` şablonuyla `05 Kararlar/ADR-NNNN Başlık.
 - [ ] Seviye 3 (sonlandırma) varsayılan açık mı? → [[Karar Motoru]]
 - [ ] Reclaim miktarı ve adımlama → [[memory.reclaim]]
 - [ ] Azami dondurma süresi (güvenlik zamanlayıcısı) varsayılanı
-- [ ] PSI eşik değerleri (Hafta 7 ölçüm turundan sonra) — [[Deney 03 Uçtan Uca nefesd]]: tetik `some 150ms/2s` fazla hassas (kısa ayırma dalgasında tetikledi); `safe_below=1.0` fazla sıkı (çözme 30 s+ gecikti)
-- [ ] Reclaim ana döngüden ayrı iş parçacığına alınsın mı? (disk swap'ta 6 s blok)
+- [ ] PSI eşik değerleri (Hafta 7 ölçüm turundan sonra kesinleşecek) — geçici varsayılanlar: tetik `some 300ms/2s`, `safe_below=5.0` ([[Deney 03 Uçtan Uca nefesd]] çalıştırma 3: çözme 30 s+ → ~14 s)
+- [x] Reclaim ana döngüden ayrı iş parçacığına alındı (2026-11-23) — tek işçili kuyruk; arka plan işi daemon durumuna dokunmaz

@@ -42,3 +42,17 @@ betik: deneyler/e2e_nefes.sh
 1. ⚠️ **Güvenli eşik çok sıkı:** `safe_below=1.0`; avg10 10 sn'lik üstel ortalama olduğundan 40'tan 1'in altına inmesi ~35–40 s sürüyor. Uygulama baskı bittikten sonra en az 30 s daha donuk kaldı. → `safe_below` daha yüksek olmalı (ör. 5–10) ve/veya "kullanılabilir bellek ≥ uygulamanın swap'taki boyutu" koşulu. → [[Kararlar]].
 2. ⚠️ **Geri kazanım ana döngüyü ~6 s bloklıyor** (disk swap, yoğun baskı). Bu sürede yeni PSI olayları kuyrukta kaldı (günlükte art arda tikler). → zram ile kısalır ([[Deney 02 zram Karşılaştırma]]: 0,4–1 s); yine de reclaim'i ayrı iş parçacığına almak gerekli.
 3. Karşılaştırma için **Nefes kapalı** aynı senaryo (varsayılan Pardus) ölçülmedi → M1/M2 için Hafta 7 ölçüm turunda.
+
+## Çalıştırma 3 (2026-11-23 21:24) — arka plan geri kazanımı + yeni varsayılanlar
+Değişiklik: reclaim ayrı iş parçacığında (`ThreadPoolExecutor(1)`), tetik `some 300 ms / 2 s` (150'den), `safe_below=5.0` (1,0'dan).
+
+| | Çalıştırma 2 | **Çalıştırma 3** |
+|---|---|---|
+| stress-ng'den önce dondurma | yok ✅ | yok ✅ |
+| Dondurma kararı → sonraki tur | ~6 s (reclaim döngüyü blokluyordu) | **7 ms** — döngü serbest ✅ |
+| Geri kazanım | 500 MB, ~6 s (ana döngüde) | 437 MB, 3,5 s (arka planda) |
+| Donukken scope belleği | 1 MB | 20 MB |
+| stress-ng bittikten sonra çözme | **30 s içinde çözülmedi** (yalnızca SIGTERM'de) | **~14 s** sonra `pressure_low` ✅ |
+| Kapanış | temiz | temiz; artık scope / süreç yok ✅ |
+
+**Sonuç:** Deney 03'ün iki bulgusu giderildi. Kalan: çözme hâlâ PSI ortalamasının sönmesini bekliyor (~14 s); "kullanılabilir bellek yeterli" gibi ikinci bir koşul daha hızlı çözebilir. Eşikler Hafta 7 ölçüm turunda (zram açık, Nefes kapalı karşılaştırmasıyla) kesinleşecek.

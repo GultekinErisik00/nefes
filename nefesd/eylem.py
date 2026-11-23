@@ -39,6 +39,10 @@ class Event:
     reclaimed_bytes: int
 
 
+def _run_now(job: Callable[[], None]) -> None:
+    job()
+
+
 class Ops(Protocol):
     def read_apps(self, frozen_since: dict[str, float]) -> tuple[AppCgroup, ...]: ...
     def list_frozen(self) -> tuple[str, ...]: ...
@@ -55,12 +59,14 @@ class Daemon:
         clock: Callable[[], float],
         focus: Callable[[], tuple[str | None, bool]],
         notify: Callable[[Event], None],
+        run_async: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
         self._config = config
         self._ops = ops
         self._clock = clock
         self._focus = focus
         self._notify = notify
+        self._run_async = run_async or _run_now
         self._frozen_since: dict[str, float] = {}
         self._cooldown_until: dict[str, float] = {}
 
@@ -136,13 +142,18 @@ class Daemon:
             self._frozen_since.pop(path, None)
             self._undo_freeze(path)
             return
+        # Geri kazanım saniyeler sürebilir (disk swap'ta ~6 s): ana döngüyü bloklamasın.
+        self._run_async(lambda: self._reclaim_and_notify(path, memory_current))
+
+    def _reclaim_and_notify(self, path: str, memory_current: int) -> None:
+        """Arka planda çalışır; daemon durumuna DOKUNMAZ (iş parçacığı güvenliği).
+        Uygulama bu arada kapanırsa sonraki tur onu zaten takipten çıkarır."""
         reclaimed = 0
         try:
             if memory_current > 0:
                 result = self._ops.reclaim(path, memory_current)
                 reclaimed = max(0, result.before - result.after)
         except ScopeGone:
-            self._frozen_since.pop(path, None)
             return
         except (OSError, ValueError) as exc:
             log.warning("geri kazanım başarısız %s: %s (uygulama donuk kalıyor)", path, exc)

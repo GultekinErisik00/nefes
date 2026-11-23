@@ -30,7 +30,7 @@ tags: [nefes, mimari]
 | `karar.py` | ✅ yazıldı | 35 birim |
 | `cgroups.py` | ✅ yazıldı — `read_apps`, `list_frozen`, `cgroup_of_pid`, `freeze`, `thaw`, `reclaim`; yazma yolu dir_fd + `O_NOFOLLOW` (kontrol-yazma yarışı yok), kapanan uygulama → `ScopeGone` | 47 birim (cgroups + psi, sahte ağaç) + 6 VM entegrasyon |
 | `psi.py` | ✅ kısmen — `parse_pressure` (bozuk girdide ValueError), `trigger_line`, `classify`; `poll` döngüsü daemon'da | (yukarıda) |
-| `eylem.py` | ✅ `Daemon` çekirdeği — durum, monoton saat, zaman aşımı/güvenli kontrol zamanlayıcısı, cooldown, açılışta/kapanışta çözme, kullanıcı "Devam ettir" | 13 birim (sahte saat) |
+| `eylem.py` | ✅ `Daemon` çekirdeği — durum, monoton saat, zaman aşımı/güvenli kontrol zamanlayıcısı, cooldown, açılışta/kapanışta çözme, kullanıcı "Devam ettir", hata yolları, **reclaim arka planda** (`run_async`) | 22 birim (sahte saat, ertelenmiş iş) |
 | `focus.py` | ✅ X11 odak (`_NET_ACTIVE_WINDOW` → PID → cgroup); okunamazsa "bilinmiyor" | uçtan uca |
 | `__main__.py` | ✅ `python3 -m nefesd` — PSI poll döngüsü, SIGTERM'de çözme | uçtan uca ([[Deney 03 Uçtan Uca nefesd]]) |
 | `dbus_servis.py` | ⏳ | — |
