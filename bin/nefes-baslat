@@ -1,0 +1,5 @@
+#!/bin/sh
+# nefes-baslat — uygulamayı kendi systemd scope'unda başlatır (bkz. nefes_baslat/__init__.py).
+# Depodan çalıştırma için: paket dizinini PYTHONPATH'e ekler. .deb kurulumunda /usr/bin'e girecek.
+NEFES_DIR=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+PYTHONPATH="$NEFES_DIR${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m nefes_baslat "$@"

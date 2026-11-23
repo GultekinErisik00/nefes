@@ -37,6 +37,8 @@ user.slice/user-1000.slice/
 - Çözüm yolu (öneride "ek işlev" olarak vardı): uygulamaları `systemd-run --user --scope --unit=app-nefes-<ad>-<pid>` ile başlatan sarmalayıcı (.desktop `Exec=` satırları veya panel başlatıcısı).
 - Odak bilgisi X11'de kolay: `_NET_ACTIVE_WINDOW` + `_NET_WM_PID` — GNOME Shell eklentisine gerek yok.
 
+**23 Kas — çözüldü:** `nefes-baslat --desktop-install` kuruldu → `~/.local/share/applications/` altında firefox-esr, gimp ve libreoffice-* için sarmalanmış kopyalar (`X-Nefes-Baslat=true`). Menüden açılan Calc artık `app.slice/app-nefes-libreoffice-*.scope` içinde. Geri almak: `~/nefes/bin/nefes-baslat --desktop-remove`. Not: zaten açık bir Firefox'a yeni pencere istenirse yeni pencere mevcut sürecin (mevcut scope'un) içinde kalır.
+
 ## Yetki bulgusu
 `user@1000.service` altı kullanıcıya **devredilmiş** (delegation): `app.slice/cgroup.freeze` ve `memory.reclaim` sahibi `user`. Yani kullanıcı kendi uygulama cgroup'larını root olmadan dondurabilir / geri kazanabilir. Prototip aşamasında root gerekmez; nihai tasarımda nefesd'nin root mu yoksa kullanıcı servisi mi olacağı → [[Kararlar]].
 
