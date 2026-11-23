@@ -33,7 +33,7 @@ tags: [nefes, mimari]
 | `eylem.py` | ✅ `Daemon` çekirdeği — durum, monoton saat, zaman aşımı/güvenli kontrol zamanlayıcısı, cooldown, açılışta/kapanışta çözme, kullanıcı "Devam ettir", hata yolları, **reclaim arka planda** (`run_async`) | 22 birim (sahte saat, ertelenmiş iş) |
 | `focus.py` | ✅ X11 odak (`_NET_ACTIVE_WINDOW` → PID → cgroup); okunamazsa "bilinmiyor" | uçtan uca |
 | `__main__.py` | ✅ `python3 -m nefesd` — PSI poll döngüsü, SIGTERM'de çözme | uçtan uca ([[Deney 03 Uçtan Uca nefesd]]) |
-| `dbus_servis.py` | ⏳ | — |
+| `dbus_servis.py` | ✅ oturum veriyolu `tr.edu.bil461.Nefes1`; `Resume`, `ListFrozen`, `AppFrozen`, `AppResumed`; sözleşme XML'den yüklenir ([[ADR-0003 D-Bus sözleşmesi]]); ayrı GLib iş parçacığı, Daemon kilitli vekil (`Locked`) | 22 birim (XML'e karşı sözleşme testi + `Gio.TestDBus`) + gerçek veriyolunda `dbus_e2e.sh` — sinyal sırası hatası bulundu ve düzeltildi ([[D-Bus Sözleşmesi]]) |
 | `nefes_zram/` | ✅ RAM → `zram-generator.conf` (kademeli boyut/algoritma, atomik yazma, yöneticinin dosyasını korur); `python3 -m nefes_zram` | 28 birim |
 
 VM entegrasyon testleri: `NEFES_VM=1 python3 -m pytest -q tests/test_vm.py` (Pardus'ta, root gerekmez; kendi `app-nefes-test-*` scope'unu açıp kapatır). 2026-11-21: 6/6 geçti.

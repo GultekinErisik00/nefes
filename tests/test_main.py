@@ -1,7 +1,35 @@
-"""__main__ yardımcıları: poll zaman aşımının milisaniyeye çevrilmesi."""
+"""__main__ yardımcıları: poll zaman aşımı ve iş parçacıkları arası kilitli vekil."""
+import threading
+
 import pytest
 
-from nefesd.__main__ import MIN_POLL_MS, poll_ms
+from nefesd.__main__ import MIN_POLL_MS, Locked, poll_ms
+
+
+def test_locked_proxy_calls_the_target_while_holding_the_lock():
+    lock = threading.Lock()
+    seen = []
+
+    class Target:
+        def double(self, x):
+            seen.append(lock.locked())
+            return x * 2
+
+    assert Locked(Target(), lock).double(21) == 42
+    assert seen == [True]
+    assert not lock.locked()
+
+
+def test_locked_proxy_releases_the_lock_when_the_target_raises():
+    lock = threading.Lock()
+
+    class Target:
+        def boom(self):
+            raise OSError("x")
+
+    with pytest.raises(OSError):
+        Locked(Target(), lock).boom()
+    assert not lock.locked()
 
 
 @pytest.mark.parametrize(

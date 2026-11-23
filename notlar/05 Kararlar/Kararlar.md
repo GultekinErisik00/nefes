@@ -9,6 +9,7 @@ Yeni karar: `Şablonlar/Karar (ADR)` şablonuyla `05 Kararlar/ADR-NNNN Başlık.
 |---|---|---|---|
 | [[ADR-0001 Python ve PyGObject]] | Servis/ajan Python 3 + PyGObject, eklenti JS | kabul | 2026-10-20 (öneri) |
 | [[ADR-0002 Asgari ürün Xfce]] | Asgari ürün Xfce/X11; odak `_NET_ACTIVE_WINDOW`, uygulamalar `nefes-baslat` ile scope'a | kabul | 2026-11-21 |
+| [[ADR-0003 D-Bus sözleşmesi]] | Oturum veriyolu, `tr.edu.bil461.Nefes1`, introspection XML tek kaynak | kabul | 2026-11-23 |
 
 ## Bekleyen kararlar
 - [ ] nefesd root sistem servisi mi, kullanıcı servisi mi (cgroup delegation yeterli olabilir)?

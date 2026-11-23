@@ -1,0 +1,44 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  Nefes D-Bus sözleşmesi — TEK YETKİLİ KAYNAK (ADR-0003).
+  Sağlayıcı: nefesd (nefesd/dbus_servis.py) · Tüketici: nefes-agent (Ali Osman)
+  İkisi de bu dosyayı Gio.DBusNodeInfo.new_for_xml ile yükler; şekil başka yerde kopyalanmaz.
+  Değişiklik: önce bu dosya, iki taraf onaylar, sonra kod (contract-first).
+
+  Veriyolu: oturum (session) · Bus adı: tr.edu.bil461.Nefes1 · Nesne: /tr/edu/bil461/Nefes1
+
+  Anlamlar:
+  - cgroup: uygulamanın cgroup yolu, /proc/<pid>/cgroup biçiminde ("/user.slice/.../app.slice/X.scope").
+    Opak kimliktir; tüketici ayrıştırmaz, yalnızca Resume'a geri verir.
+  - app_name: kullanıcıya gösterilecek kısa uygulama adı (ör. "firefox"); boş olmaz.
+  - memory_bytes: uygulamanın DONDURULDUĞU ANDAKİ bellek kullanımı (memory.current, bayt) — zram'a
+    itilecek miktarın üst sınırı. Gerçekte geri kazanılan miktar sinyalde yoktur (nefesd günlüğüne yazılır).
+  - Sıra garantisi: aynı cgroup için AppFrozen her zaman AppResumed'dan ÖNCE gelir; ikisi de dondurma/
+    çözme anında, nefesd'nin ana döngüsünden yayınlanır (2026-11-23 sözleşme değişikliği, ADR-0003).
+  - reason (AppResumed): "focus" | "timeout" | "pressure_low" | "user" | "shutdown".
+    Yeni değerler eklenebilir; tüketici bilmediği değeri "çözüldü" olarak ele almalı.
+  - Resume dönüşü: true = çözüldü; false = bu nefesd dondurmamış, zaten çözülmüş ya da çözme başarısız.
+  - ListFrozen: (cgroup, app_name, frozen_seconds) — şu an donuk uygulamalar; ajan yeniden
+    başladığında bildirimleri geri kurmak için.
+-->
+<node name="/tr/edu/bil461/Nefes1">
+  <interface name="tr.edu.bil461.Nefes1.Manager">
+    <method name="Resume">
+      <arg name="cgroup" type="s" direction="in"/>
+      <arg name="resumed" type="b" direction="out"/>
+    </method>
+    <method name="ListFrozen">
+      <arg name="apps" type="a(ssu)" direction="out"/>
+    </method>
+    <signal name="AppFrozen">
+      <arg name="cgroup" type="s"/>
+      <arg name="app_name" type="s"/>
+      <arg name="memory_bytes" type="t"/>
+    </signal>
+    <signal name="AppResumed">
+      <arg name="cgroup" type="s"/>
+      <arg name="reason" type="s"/>
+    </signal>
+  </interface>
+</node>

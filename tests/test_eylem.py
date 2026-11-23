@@ -95,7 +95,8 @@ def test_high_pressure_freezes_then_reclaims_the_candidate_and_notifies():
     daemon, ops, _, events = make({FIREFOX: 900 * MB, CALC: 300 * MB}, focus=(CALC, True))
     assert daemon.tick(fired=True, some_avg10=30.0) == (Freeze(FIREFOX),)
     assert ops.calls == [("freeze", FIREFOX), ("reclaim", FIREFOX, 900 * MB)]
-    assert events == [Event("frozen", FIREFOX, "pressure", 898 * MB)]
+    # olay dondurma anında, o anki bellek kullanımıyla (sözleşme: memory_bytes)
+    assert events == [Event("frozen", FIREFOX, "pressure", 900 * MB)]
 
 
 def test_frozen_app_is_not_frozen_twice_while_pressure_continues():
@@ -112,28 +113,38 @@ def test_tick_returns_after_freeze_and_reclaim_runs_in_background():
     assert daemon.tick(fired=True, some_avg10=30.0) == (Freeze(FIREFOX),)
     assert ops.calls == [("freeze", FIREFOX)]  # reclaim henüz yok: döngü bloklanmadı
     assert daemon.frozen_paths() == (FIREFOX,)
-    assert events == []
+    assert events == [Event("frozen", FIREFOX, "pressure", 900 * MB)]  # bildirim beklemeden
     deferred.run()
     assert ops.calls[-1] == ("reclaim", FIREFOX, 900 * MB)
-    assert events == [Event("frozen", FIREFOX, "pressure", 898 * MB)]
+    assert events == [Event("frozen", FIREFOX, "pressure", 900 * MB)]  # arka plan olay üretmez
 
 
-def test_background_reclaim_of_an_app_that_exited_neither_crashes_nor_notifies():
+def test_resume_before_background_reclaim_keeps_frozen_then_resumed_order():
+    # Gerçek veriyolunda bulunan hata (2026-11-23): AppResumed, AppFrozen'dan önce geliyordu.
+    deferred = Deferred()
+    daemon, ops, _, events = make({FIREFOX: 900 * MB}, run_async=deferred)
+    daemon.tick(fired=True, some_avg10=30.0)
+    daemon.resume(FIREFOX)  # kullanıcı geri kazanım bitmeden "Devam ettir" dedi
+    deferred.run()
+    assert [e.kind for e in events] == ["frozen", "resumed"]
+
+
+def test_background_reclaim_of_an_app_that_exited_adds_no_event():
     deferred = Deferred()
     daemon, ops, _, events = make({FIREFOX: 900 * MB}, run_async=deferred)
     daemon.tick(fired=True, some_avg10=30.0)
     ops.gone.add(FIREFOX)
-    deferred.run()
-    assert events == []
+    deferred.run()  # çökmemeli
+    assert events == [Event("frozen", FIREFOX, "pressure", 900 * MB)]
 
 
-def test_background_reclaim_error_still_notifies_with_zero_reclaimed():
+def test_background_reclaim_error_adds_no_event_and_keeps_app_frozen():
     deferred = Deferred()
     daemon, ops, _, events = make({FIREFOX: 900 * MB}, run_async=deferred)
     daemon.tick(fired=True, some_avg10=30.0)
     ops.fail[("reclaim", FIREFOX)] = errno.EIO
     deferred.run()
-    assert events == [Event("frozen", FIREFOX, "pressure", 0)]
+    assert events == [Event("frozen", FIREFOX, "pressure", 900 * MB)]
     assert daemon.frozen_paths() == (FIREFOX,)
 
 
@@ -221,7 +232,7 @@ def test_failed_reclaim_still_tracks_and_notifies_the_frozen_app():
     ops.fail[("reclaim", FIREFOX)] = errno.EINVAL
     daemon.tick(fired=True, some_avg10=30.0)
     assert daemon.frozen_paths() == (FIREFOX,)
-    assert events == [Event("frozen", FIREFOX, "pressure", 0)]
+    assert events == [Event("frozen", FIREFOX, "pressure", 900 * MB)]
 
 
 def test_startup_continues_past_scopes_that_fail_to_thaw():
@@ -246,6 +257,15 @@ def test_exited_frozen_app_is_forgotten():
     del ops.mem[FIREFOX]  # uygulama kapandı
     daemon.tick(fired=False, some_avg10=30.0)
     assert daemon.frozen_paths() == ()
+
+
+def test_frozen_durations_reports_seconds_since_each_freeze():
+    daemon, _, clock, _ = make({FIREFOX: 900 * MB, CALC: 300 * MB})
+    daemon.tick(fired=True, some_avg10=30.0)  # FIREFOX, t=1000
+    clock.t += 10
+    daemon.tick(fired=True, some_avg10=30.0)  # CALC, t=1010
+    clock.t += 5
+    assert daemon.frozen_durations() == ((FIREFOX, 15.0), (CALC, 5.0))
 
 
 # --- başlangıç / kapanış güvenliği --------------------------------------------

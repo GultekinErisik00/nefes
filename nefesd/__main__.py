@@ -10,6 +10,7 @@ import argparse
 import logging
 import math
 import os
+import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 import select
@@ -58,10 +59,29 @@ class CgroupOps:
         return cgroups.reclaim(self._root, path, self._uid, nbytes)
 
 
+class Locked:
+    """Hedefin yöntemlerini tek bir kilitle çağırır: Daemon ana döngü ile D-Bus iş parçacığı
+    arasında paylaşıldığından durumunu aynı anda iki iş parçacığı değiştirmesin."""
+
+    def __init__(self, target: object, lock: threading.Lock) -> None:
+        self._target, self._lock = target, lock
+
+    def __getattr__(self, name: str):
+        attr = getattr(self._target, name)
+        if not callable(attr):
+            return attr
+
+        def locked_call(*args, **kwargs):
+            with self._lock:
+                return attr(*args, **kwargs)
+
+        return locked_call
+
+
 def log_event(event: Event) -> None:
     name = event.path.rsplit("/", 1)[-1]
     if event.kind == "frozen":
-        log.info("DONDURULDU %s (%d MB geri kazanıldı)", name, event.reclaimed_bytes // MB)
+        log.info("DONDURULDU %s (%d MB kullanıyordu)", name, event.memory_bytes // MB)
     else:
         log.info("DEVAM %s (neden: %s)", name, event.reason)
 
@@ -78,6 +98,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--safe-below", type=float, default=5.0,
                    help="some avg10 bunun altında → güvenli (1.0 çözmeyi 30 s+ geciktirdi, Deney 03)")
     p.add_argument("--min-candidate-mb", type=int, default=50)
+    p.add_argument("--no-dbus", action="store_true", help="D-Bus servisini başlatma (yalnızca log)")
     p.add_argument("--log-level", default="INFO")
     return p.parse_args(argv)
 
@@ -96,7 +117,8 @@ def background(executor: ThreadPoolExecutor) -> Callable[[Callable[[], None]], N
 
 
 def build_daemon(args: argparse.Namespace,
-                 run_async: Callable[[Callable[[], None]], None] | None = None) -> Daemon:
+                 run_async: Callable[[Callable[[], None]], None] | None = None,
+                 notify: Callable[[Event], None] = log_event) -> Daemon:
     config = Config(
         policy=Policy(uid=args.uid, protected_names=PROTECTED,
                       max_frozen_seconds=args.max_frozen,
@@ -106,7 +128,19 @@ def build_daemon(args: argparse.Namespace,
         safe_check_seconds=2.0,
     )
     return Daemon(config, CgroupOps(args.root, args.uid), clock=time.monotonic,
-                  focus=X11Focus(), notify=log_event, run_async=run_async)
+                  focus=X11Focus(), notify=notify, run_async=run_async)
+
+
+def start_dbus(controller: object, listeners: list[Callable[[Event], None]]) -> Callable[[], None] | None:
+    """D-Bus servisini oturum veriyolunda başlatır; veriyolu yoksa servis D-Bus'sız sürer."""
+    try:
+        from nefesd import dbus_servis
+    except (ImportError, ValueError) as exc:  # python3-gi yok
+        log.warning("D-Bus devre dışı (PyGObject yok): %s", exc)
+        return None
+    service = dbus_servis.NefesService(controller)
+    listeners.append(service.emit)
+    return dbus_servis.start(service)
 
 
 def poll_ms(seconds: float | None) -> int | None:
@@ -118,7 +152,14 @@ def poll_ms(seconds: float | None) -> int | None:
 
 def run(args: argparse.Namespace) -> int:
     reclaimer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nefes-reclaim")
-    daemon = build_daemon(args, run_async=background(reclaimer))
+    listeners: list[Callable[[Event], None]] = [log_event]
+
+    def notify(event: Event) -> None:
+        for listener in listeners:
+            listener(event)
+
+    daemon = Locked(build_daemon(args, run_async=background(reclaimer), notify=notify), threading.Lock())
+    stop_dbus = start_dbus(daemon, listeners) if not args.no_dbus else None
     fd = os.open(PSI_FILE, os.O_RDWR | os.O_NONBLOCK)
     os.write(fd, trigger_line("some", args.stall_ms * 1000, args.window_ms * 1000))
     poller = select.poll()
@@ -157,7 +198,9 @@ def run(args: argparse.Namespace) -> int:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         reclaimer.shutdown(wait=False, cancel_futures=True)  # bekleyen geri kazanımlar iptal
-        daemon.shutdown()
+        daemon.shutdown()  # AppResumed(shutdown) sinyalleri D-Bus kapanmadan gitsin
+        if stop_dbus is not None:
+            stop_dbus()
         os.close(fd)
         left = daemon.frozen_paths()
         if left:

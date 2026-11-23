@@ -36,7 +36,7 @@ class Event:
     kind: str  # "frozen" | "resumed"
     path: str
     reason: str  # frozen: "pressure"; resumed: "focus" | "timeout" | "pressure_low" | "user" | "shutdown"
-    reclaimed_bytes: int
+    memory_bytes: int  # frozen: dondurma anındaki memory.current; resumed: 0 (sözleşme, ADR-0003)
 
 
 def _run_now(job: Callable[[], None]) -> None:
@@ -115,6 +115,12 @@ class Daemon:
         for path in list(self._frozen_since):
             self._thaw(path, "shutdown", now)
 
+    def frozen_durations(self) -> tuple[tuple[str, float], ...]:
+        """(yol, kaç saniyedir donuk) — dondurulma sırasına göre; D-Bus ListFrozen için."""
+        now = self._clock()
+        ordered = sorted(self._frozen_since.items(), key=lambda item: item[1])
+        return tuple((path, now - since) for path, since in ordered)
+
     def frozen_paths(self) -> tuple[str, ...]:
         return tuple(sorted(self._frozen_since))
 
@@ -142,22 +148,25 @@ class Daemon:
             self._frozen_since.pop(path, None)
             self._undo_freeze(path)
             return
+        # Bildirim dondurma ANINDA, bu iş parçacığından: aynı uygulamanın "resumed" olayı ondan önce
+        # gidemez (gerçek veriyolunda bulunan sıra hatası, 2026-11-23).
+        self._notify(Event("frozen", path, "pressure", memory_current))
         # Geri kazanım saniyeler sürebilir (disk swap'ta ~6 s): ana döngüyü bloklamasın.
-        self._run_async(lambda: self._reclaim_and_notify(path, memory_current))
+        if memory_current > 0:
+            self._run_async(lambda: self._reclaim(path, memory_current))
 
-    def _reclaim_and_notify(self, path: str, memory_current: int) -> None:
-        """Arka planda çalışır; daemon durumuna DOKUNMAZ (iş parçacığı güvenliği).
+    def _reclaim(self, path: str, memory_current: int) -> None:
+        """Arka planda çalışır; daemon durumuna DOKUNMAZ ve olay üretmez (yalnızca günlük).
         Uygulama bu arada kapanırsa sonraki tur onu zaten takipten çıkarır."""
-        reclaimed = 0
         try:
-            if memory_current > 0:
-                result = self._ops.reclaim(path, memory_current)
-                reclaimed = max(0, result.before - result.after)
+            result = self._ops.reclaim(path, memory_current)
         except ScopeGone:
             return
         except (OSError, ValueError) as exc:
             log.warning("geri kazanım başarısız %s: %s (uygulama donuk kalıyor)", path, exc)
-        self._notify(Event("frozen", path, "pressure", reclaimed))
+            return
+        log.info("geri kazanıldı %s: %d MB", path.rsplit("/", 1)[-1],
+                 max(0, result.before - result.after) // (1024 * 1024))
 
     def _undo_freeze(self, path: str) -> None:
         try:
