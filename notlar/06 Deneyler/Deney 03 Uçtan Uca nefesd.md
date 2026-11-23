@@ -55,4 +55,16 @@ Değişiklik: reclaim ayrı iş parçacığında (`ThreadPoolExecutor(1)`), teti
 | stress-ng bittikten sonra çözme | **30 s içinde çözülmedi** (yalnızca SIGTERM'de) | **~14 s** sonra `pressure_low` ✅ |
 | Kapanış | temiz | temiz; artık scope / süreç yok ✅ |
 
-**Sonuç:** Deney 03'ün iki bulgusu giderildi. Kalan: çözme hâlâ PSI ortalamasının sönmesini bekliyor (~14 s); "kullanılabilir bellek yeterli" gibi ikinci bir koşul daha hızlı çözebilir. Eşikler Hafta 7 ölçüm turunda (zram açık, Nefes kapalı karşılaştırmasıyla) kesinleşecek.
+## Çalıştırma 4 (2026-11-23 21:34) — **zram açık** (nefes-zram: 1973 MB, zstd, öncelik 100)
+| | Çalıştırma 3 (disk swap) | **Çalıştırma 4 (zram)** |
+|---|---|---|
+| Geri kazanım | 437 MB, 3,5 s | **501 MB, 2,3 s** |
+| Donukken scope belleği | 20 MB | **1 MB** |
+| PSI some avg10 tepe | 50,7 | **29,8** |
+| stress-ng bittikten sonra çözme | ~14 s | **~0 s** (avg10 stress bitmeden 5'in altına indi) |
+| **Devam sonrası ilk tam geçiş (M4)** | ölçülmedi | **1,57 s** ✅ (hedef < 5 s; [[Deney 01 Dondur Geri Kazan]]'da disk swap ile ~9–10 s) |
+| Kapanış | temiz | temiz; artık scope / süreç yok ✅ |
+
+**Sonuç:** zram ile zincirin tamamı hedeflerin içinde: daha hızlı ve daha çok geri kazanım, daha düşük sistem baskısı, baskı biter bitmez çözme ve gerçek devam süresi 1,6 s (M4 ✅). Bu, [[Deney 02 zram Karşılaştırma]]'daki "zram zorunlu" sonucunu uçtan uca doğruluyor.
+
+**Sonuç (çalıştırma 3):** Deney 03'ün iki bulgusu giderildi. Kalan: çözme hâlâ PSI ortalamasının sönmesini bekliyor (~14 s); "kullanılabilir bellek yeterli" gibi ikinci bir koşul daha hızlı çözebilir. Eşikler Hafta 7 ölçüm turunda (zram açık, Nefes kapalı karşılaştırmasıyla) kesinleşecek.

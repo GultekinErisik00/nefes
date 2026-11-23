@@ -16,7 +16,7 @@ Bağlantı: `ssh userpardus` (macOS `~/.ssh/config` kaydı). Kullanıcı `user` 
 | Sanallaştırma | VirtualBox (`oracle`) | ✅ |
 | CPU / RAM | **1 vCPU / 2 GB** (1973 MB) | ⚠️ test düzeni 2 vCPU / 4 GB diyor |
 | Masaüstü | **Xfce, X11** (`xfce4-session`, `xfwm4`) | ⚠️ asgari ürün GNOME varsayıyordu |
-| Swap | `/dev/sda5` disk bölümü, 1.1 GB, öncelik -2 | zram **yok** |
+| Swap | `/dev/sda5` disk bölümü, 1.1 GB, öncelik -2 | zram **yok** → **23 Kas: zram kuruldu** (`systemd-zram-generator` + `nefes_zram`: 1973 MB zstd, öncelik 100) |
 | vm.swappiness | 60 | — |
 | earlyoom / systemd-oomd / nohang / zram-generator | hiçbiri kurulu değil | varsayılan Pardus = yalnız çekirdek OOM |
 | PSI | `/proc/pressure/memory` çalışıyor | ✅ |
