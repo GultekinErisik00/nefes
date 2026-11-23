@@ -176,10 +176,12 @@ def test_app_can_be_frozen_again_after_cooldown_ends():
     assert daemon.tick(fired=True, some_avg10=30.0) == (Freeze(FIREFOX),)
 
 
-def test_safe_pressure_thaws_frozen_app():
+def test_safe_pressure_thaws_frozen_app_only_after_the_minimum_frozen_time():
     daemon, ops, clock, events = make({FIREFOX: 900 * MB})
     daemon.tick(fired=True, some_avg10=30.0)
     clock.t += 5
+    assert daemon.tick(fired=False, some_avg10=0.2) == ()  # 5 s: henüz erken (en az 30 s)
+    clock.t += 25
     assert daemon.tick(fired=False, some_avg10=0.2) == (Thaw(FIREFOX, "pressure_low"),)
     assert daemon.frozen_paths() == ()
     assert events[-1] == Event("resumed", FIREFOX, "pressure_low", 0)

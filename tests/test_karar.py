@@ -192,6 +192,23 @@ def test_thaws_only_the_longest_frozen_app_when_pressure_is_safe():
     assert decide(s, POLICY) == (Thaw(CALC, "pressure_low"),)
 
 
+def test_safe_pressure_does_not_thaw_an_app_frozen_for_less_than_the_minimum():
+    # Gerçek sistemde bulunan hata (2026-11-23): tetik kısa süreli bekleme ile gelir ama avg10
+    # o anda zaten "güvenli" olabilir → uygulama 2 s sonra çözülüp gidip geliyordu.
+    s = snap([app(FIREFOX, 5, frozen_since=NOW - 10)], pressure=Pressure.SAFE)
+    assert decide(s, POLICY) == ()
+
+
+def test_safe_pressure_thaws_an_app_frozen_exactly_the_minimum():
+    s = snap([app(FIREFOX, 5, frozen_since=NOW - 30)], pressure=Pressure.SAFE)
+    assert decide(s, POLICY) == (Thaw(FIREFOX, "pressure_low"),)
+
+
+def test_minimum_frozen_time_does_not_delay_a_focus_thaw():
+    s = snap([app(FIREFOX, 5, frozen_since=NOW - 1)], pressure=Pressure.SAFE, focus=FIREFOX)
+    assert decide(s, POLICY) == (Thaw(FIREFOX, "focus"),)
+
+
 def test_safe_pressure_without_frozen_apps_does_nothing():
     s = snap([app(FIREFOX, 900)], pressure=Pressure.SAFE)
     assert decide(s, POLICY) == ()

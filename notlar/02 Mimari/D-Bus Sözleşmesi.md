@@ -9,7 +9,7 @@ hafta: 5
 **Tek yetkili kaynak: `nefesd/tr.edu.bil461.Nefes1.xml`** — imzalar ve anlamlar orada; bu not şekli **kopyalamaz**, yalnızca bağlam ve gerekçe tutar. Karar: [[ADR-0003 D-Bus sözleşmesi]].
 
 - Veriyolu: **oturum** · Bus adı `tr.edu.bil461.Nefes1` · Nesne `/tr/edu/bil461/Nefes1` · Arayüz `tr.edu.bil461.Nefes1.Manager`
-- Sağlayıcı: nefesd (`nefesd/dbus_servis.py`, Gültekin) · Tüketici: nefes-agent (Ali Osman)
+- Sağlayıcı: nefesd (`nefesd/dbus_servis.py`) · Tüketici: nefes-agent (`nefes_agent/__main__.py`, XML'i `importlib.resources` ile yükler; 23 Kas'ta yazıldı, `deneyler/agent_e2e.sh` ile gerçek veriyolunda doğrulandı)
 - Tüketici XML'i `Gio.DBusNodeInfo.new_for_xml` ile yükler; elle tip/alan kopyalamaz.
 - Değişiklik protokolü: önce XML → iki taraf onayı → sonra kod.
 

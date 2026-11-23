@@ -98,6 +98,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--safe-below", type=float, default=5.0,
                    help="some avg10 bunun altında → güvenli (1.0 çözmeyi 30 s+ geciktirdi, Deney 03)")
     p.add_argument("--min-candidate-mb", type=int, default=50)
+    p.add_argument("--min-frozen", type=float, default=30.0,
+                   help="güvenli baskıda çözmeden önce en az bu kadar donuk kal (s); 2 s'lik gidip gelmeyi önler")
     p.add_argument("--no-dbus", action="store_true", help="D-Bus servisini başlatma (yalnızca log)")
     p.add_argument("--log-level", default="INFO")
     return p.parse_args(argv)
@@ -122,7 +124,8 @@ def build_daemon(args: argparse.Namespace,
     config = Config(
         policy=Policy(uid=args.uid, protected_names=PROTECTED,
                       max_frozen_seconds=args.max_frozen,
-                      min_candidate_bytes=args.min_candidate_mb * MB),
+                      min_candidate_bytes=args.min_candidate_mb * MB,
+                      min_frozen_seconds=args.min_frozen),
         cooldown_seconds=args.cooldown,
         safe_below=args.safe_below,
         safe_check_seconds=2.0,

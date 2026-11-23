@@ -32,6 +32,9 @@ class Policy:
     protected_names: frozenset[str]
     max_frozen_seconds: float
     min_candidate_bytes: int
+    # "Güvenli baskı" çözmesi ancak bu kadar donukluktan sonra: tetik kısa süreli beklemeyle gelir,
+    # avg10 o an zaten düşük olabilir → yoksa uygulama saniyeler içinde donup çözülür (2026-11-23).
+    min_frozen_seconds: float = 30.0
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,9 @@ def decide(snapshot: Snapshot, policy: Policy) -> tuple[Action, ...]:
 
     if snapshot.pressure is Pressure.SAFE:
         still_frozen = [
-            (a.frozen_since, a) for a in apps if a.frozen_since is not None and a.path not in thawed
+            (a.frozen_since, a) for a in apps
+            if a.frozen_since is not None and a.path not in thawed
+            and snapshot.now - a.frozen_since >= policy.min_frozen_seconds
         ]
         if still_frozen:
             _, oldest = min(still_frozen, key=lambda pair: pair[0])

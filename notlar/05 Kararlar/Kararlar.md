@@ -19,4 +19,5 @@ Yeni karar: `Şablonlar/Karar (ADR)` şablonuyla `05 Kararlar/ADR-NNNN Başlık.
 - [ ] Reclaim miktarı ve adımlama → [[memory.reclaim]]
 - [ ] Azami dondurma süresi (güvenlik zamanlayıcısı) varsayılanı
 - [ ] PSI eşik değerleri (Hafta 7 ölçüm turundan sonra kesinleşecek) — geçici varsayılanlar: tetik `some 300ms/2s`, `safe_below=5.0` ([[Deney 03 Uçtan Uca nefesd]] çalıştırma 3: çözme 30 s+ → ~14 s)
+- [x] **Asgari donukluk süresi** (2026-11-23): `Policy.min_frozen_seconds = 30` — `pressure_low` çözmesi ancak 30 s donukluktan sonra (odak/zaman aşımı/kullanıcı etkilenmez). Neden: tetik kısa süreli beklemeyle gelir ama avg10 o an zaten < 5 olabiliyordu → uygulama 2 s içinde donup çözülüyordu (zram açıkken Pardus'ta görüldü). `--min-frozen` ile ayarlanır.
 - [x] Reclaim ana döngüden ayrı iş parçacığına alındı (2026-11-23) — tek işçili kuyruk; arka plan işi daemon durumuna dokunmaz
