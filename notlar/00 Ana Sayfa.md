@@ -27,6 +27,7 @@ tags: [nefes, dizin]
 ## Deneyler
 - [[Deney 01 Dondur Geri Kazan]] — freeze 18 ms, reclaim 403→4 MB, devam 10 s (disk swap)
 - [[Deney 02 zram Karşılaştırma]] — devam: disk 9,1 s → zram lz4 0,88 s / zstd 0,79 s
+- [[Deney 04 Ölçüm Önizlemesi]] — nefes-olcum ilk karşılaştırma: maks gecikme 217 → 66 ms; zram'lı makinede M2 ölçülemedi
 - [[Deney 03 Uçtan Uca nefesd]] — nefesd baskıda 495 MB'lık uygulamayı dondurdu, baskı bitince çözdü; tetikleyici fazla hassas
 
 ## Çalışma

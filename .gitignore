@@ -34,3 +34,6 @@ graphify-out/
 
 # Öneri belgesi öğrenci numaraları içeriyor; açık depoya konmaz (yerelde kalır)
 *_Proje_Onerisi.pdf
+
+# Ölçüm ham verisi (yerelde/VM'de kalır; özet tablolar notlara yazılır)
+olcumler/
