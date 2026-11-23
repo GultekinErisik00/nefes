@@ -1,0 +1,10 @@
+#!/usr/bin/make -f
+# Saf Python paketi: derlenecek bir şey yok; modüller dist-packages'a kopyalanır.
+
+%:
+	dh $@
+
+override_dh_install:
+	dh_install
+	find debian/nefes -name __pycache__ -prune -exec rm -rf {} +
+	find debian/nefes -name '._*' -delete  # macOS AppleDouble artıkları (lintian)

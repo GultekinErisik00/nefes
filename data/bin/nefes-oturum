@@ -1,0 +1,9 @@
+#!/bin/sh
+# Oturum açılışında (XDG autostart) çalışır: Xfce graphical-session.target başlatmadığı için
+# kullanıcı servislerini buradan başlatırız.
+#  1) X oturumunun ortamını systemd kullanıcı yöneticisine aktar (nefesd X11 odağı okur)
+#  2) menü/panel başlatıcılarını nefes-baslat ile sarmala (kullanıcının kendi dosyalarına dokunmaz)
+#  3) nefesd ve nefes-agent'ı başlat
+systemctl --user import-environment DISPLAY XAUTHORITY 2>/dev/null
+/usr/bin/nefes-baslat --desktop-install >/dev/null 2>&1
+exec systemctl --user start nefesd.service nefes-agent.service

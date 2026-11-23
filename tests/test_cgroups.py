@@ -17,6 +17,7 @@ from nefesd.cgroups import (
     read_apps,
     reclaim,
     thaw,
+    thaw_all,
 )
 from nefesd.karar import AppCgroup
 
@@ -188,6 +189,35 @@ def test_reclaim_other_write_errors_propagate(tmp_path, monkeypatch):
 def test_reclaim_on_vanished_scope_raises_scope_gone(tmp_path):
     with pytest.raises(ScopeGone):
         reclaim(tmp_path, FIREFOX, UID, 600)
+
+
+# --- thaw_all: servis çökünce/durunca (ExecStopPost) --------------------------------
+
+def test_thaw_all_thaws_every_scope_left_frozen_and_reports_them(tmp_path):
+    fx = make_cg(tmp_path, FIREFOX, frozen=True)
+    (fx / "cgroup.freeze").write_text("1\n")
+    calc = make_cg(tmp_path, CALC, frozen=False)
+    assert thaw_all(tmp_path, UID) == ([FIREFOX], [])
+    assert (fx / "cgroup.freeze").read_text().strip() == "0"
+    assert (calc / "cgroup.freeze").read_text().strip() == "0"
+
+
+def test_thaw_all_continues_after_a_failure_and_reports_it(tmp_path, monkeypatch):
+    make_cg(tmp_path, FIREFOX, frozen=True)
+    calc = make_cg(tmp_path, CALC, frozen=True)
+    (calc / "cgroup.freeze").write_text("1\n")
+    real_thaw = cgroups.thaw
+
+    def thaw_failing_for_firefox(root, path, uid):
+        if path == FIREFOX:
+            raise OSError(errno.EBUSY, "meşgul")
+        return real_thaw(root, path, uid)
+
+    monkeypatch.setattr(cgroups, "thaw", thaw_failing_for_firefox)
+    thawed, failed = thaw_all(tmp_path, UID)
+    assert thawed == [CALC]
+    assert failed == [FIREFOX]
+    assert (calc / "cgroup.freeze").read_text().strip() == "0"
 
 
 def test_reclaim_refuses_non_positive_amount(tmp_path):

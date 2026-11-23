@@ -1,0 +1,10 @@
+[Unit]
+Description=Nefes oturum ajanı — Türkçe bildirim ve "Devam ettir"
+Documentation=https://github.com/GultekinErisik00/nefes
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nefes-agent
+Restart=on-failure
+RestartSec=2
+Slice=session.slice

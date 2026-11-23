@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Nefes
+Name[tr]=Nefes
+Comment=Prevents desktop freezes under memory pressure
+Comment[tr]=Bellek dolduğunda masaüstünün donmasını önler
+Exec=/usr/bin/nefes-oturum
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

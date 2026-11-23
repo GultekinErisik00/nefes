@@ -47,6 +47,22 @@ def read_apps(root: Path, uid: int, frozen_since: Mapping[str, float]) -> tuple[
     return tuple(apps)
 
 
+def thaw_all(root: Path, uid: int) -> tuple[list[str], list[str]]:
+    """Diskte donuk her uygulama scope'unu çözer: (çözülenler, çözülemeyenler). Biri başarısız
+    olsa da diğerlerine devam eder. systemd ExecStopPost: servis çökse bile hiçbir şey donuk kalmaz."""
+    thawed, failed = [], []
+    for path in list_frozen(root, uid):
+        try:
+            thaw(root, path, uid)
+        except ScopeGone:
+            continue
+        except (OSError, CgroupPathError):
+            failed.append(path)
+            continue
+        thawed.append(path)
+    return thawed, failed
+
+
 def list_frozen(root: Path, uid: int) -> tuple[str, ...]:
     """Diskte donmuş görünen scope'lar — servis yeniden başlarken çözülmeleri için."""
     return tuple(path for path, directory in _app_scopes(root, uid) if _is_frozen(directory))

@@ -1,0 +1,13 @@
+[Unit]
+Description=Nefes — donma önleyici bellek baskısı servisi
+Documentation=https://github.com/GultekinErisik00/nefes
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nefesd
+# Güvenlik kuralı 3: servis çökse ya da dursa bile dondurduğu hiçbir uygulama donuk kalmaz.
+ExecStopPost=/usr/bin/nefesd --thaw-all
+Restart=on-failure
+RestartSec=2
+# Kendisi asla aday olmasın: app.slice değil session.slice.
+Slice=session.slice

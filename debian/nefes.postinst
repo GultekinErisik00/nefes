@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # zram: RAM'e göre /etc/systemd/zram-generator.conf (yöneticinin kendi dosyasına dokunmaz).
+        # Zaten çalışan zram0 yeniden başlatılmaz (kullanımdaki swap'ı bozmamak için).
+        if /usr/bin/nefes-zram; then
+            systemctl daemon-reload || true
+            systemctl start systemd-zram-setup@zram0.service || true
+        else
+            echo "nefes: zram yapılandırması yazılmadı (yukarıdaki iletiye bakın)" >&2
+        fi
+        echo "nefes: servisler bir sonraki oturum açılışında başlar (ya da: nefes-oturum)"
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

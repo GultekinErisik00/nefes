@@ -1,0 +1,7 @@
+nefes (0.5.0) unstable; urgency=medium
+
+  * İlk paket: nefesd, nefes-agent, nefes-baslat, nefes-zram, nefes-olcum.
+  * systemd kullanıcı birimleri (ExecStopPost ile çökme sonrası çözme) ve
+    XDG autostart ile oturum açılışında başlatma.
+
+ -- Gültekin Erişik <157842493+GultekinErisik@users.noreply.github.com>  Mon, 23 Nov 2026 23:20:00 +0300

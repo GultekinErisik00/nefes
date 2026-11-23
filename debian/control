@@ -1,0 +1,30 @@
+Source: nefes
+Section: admin
+Priority: optional
+Maintainer: Gültekin Erişik <157842493+GultekinErisik@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/GultekinErisik00/nefes
+Vcs-Browser: https://github.com/GultekinErisik00/nefes
+Vcs-Git: https://github.com/GultekinErisik00/nefes.git
+
+Package: nefes
+Architecture: all
+Depends: ${misc:Depends},
+         python3 (>= 3.11),
+         python3-gi,
+         gir1.2-glib-2.0,
+         gir1.2-notify-0.7,
+         python3-xlib,
+         systemd,
+         systemd-zram-generator
+Description: Pardus için donma önleyici bellek baskısı yöneticisi
+ Nefes, bellek dolduğunda masaüstünün donmasını önler: odakta olmayan en büyük
+ uygulamayı öldürmek yerine dondurur (cgroup.freeze), sayfalarını sıkıştırılmış
+ swap'a (zram) iter (memory.reclaim) ve Türkçe bir "Devam ettir" bildirimi
+ gösterir. Hiçbir uygulama sonlandırılmaz.
+ .
+ Bileşenler: nefesd (PSI izleme + karar motoru, systemd kullanıcı servisi),
+ nefes-agent (bildirim ajanı), nefes-baslat (uygulamaları kendi cgroup'unda
+ başlatan sarmalayıcı), nefes-zram (RAM'e göre zram), nefes-olcum (ölçüm).

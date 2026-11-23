@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+CONF=/etc/systemd/zram-generator.conf
+
+case "$1" in
+    purge)
+        # Yalnızca nefes-zram'ın yazdığı yapılandırmayı sil (ilk satır işareti).
+        if [ -f "$CONF" ] && head -n1 "$CONF" | grep -q '^# nefes-zram tarafından üretildi'; then
+            rm -f "$CONF"
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

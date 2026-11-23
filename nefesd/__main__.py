@@ -101,6 +101,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--min-frozen", type=float, default=30.0,
                    help="güvenli baskıda çözmeden önce en az bu kadar donuk kal (s); 2 s'lik gidip gelmeyi önler")
     p.add_argument("--no-dbus", action="store_true", help="D-Bus servisini başlatma (yalnızca log)")
+    p.add_argument("--thaw-all", action="store_true",
+                   help="diskte donuk tüm uygulama scope'larını çöz ve çık (systemd ExecStopPost)")
     p.add_argument("--log-level", default="INFO")
     return p.parse_args(argv)
 
@@ -215,6 +217,13 @@ def run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     logging.basicConfig(level=args.log_level.upper(), format="%(asctime)s %(levelname)s %(message)s")
+    if args.thaw_all:
+        thawed, failed = cgroups.thaw_all(args.root, args.uid)
+        for path in thawed:
+            log.info("çözüldü (thaw-all): %s", path.rsplit("/", 1)[-1])
+        for path in failed:
+            log.error("çözülemedi (thaw-all): %s", path)
+        return 1 if failed else 0
     return run(args)
 
 
