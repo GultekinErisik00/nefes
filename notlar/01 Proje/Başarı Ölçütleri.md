@@ -14,8 +14,8 @@ tags: [nefes, olcum]
 | M2 Toplam donma süresi | gecikme > 1 s aralıkların toplamı | varsayılana göre ≥ %80 azalma | ✅ 0,7 ± 0,7 s → 0 s (−%100); taban düşük, gerçek uygulamalarla tekrarlanmalı ([[Deney 05 Ölçüm Turu]]) |
 | M3 Veri kaybı | sonlandırılan uygulama sayısı; Calc kaydedilebiliyor mu | Seviye 3 olmadan 0 | ✅ 0 (her üç yapılandırmada; earlyoom bu yükte tetiklenmedi) ([[Deney 05 Ölçüm Turu]]) |
 | M4 Devam ettirme süresi | "Devam ettir" → etkileşime hazır | ölç, hedef < 5 s | ✅ 1,57 s (zram, 400 MB) ([[Deney 03 Uçtan Uca nefesd]]) |
-| M5 Servis maliyeti | nefesd CPU/RSS (boşta, baskıda) | CPU < %1, RSS < 30 MB | ✅ boşta CPU %0,00 / RSS 10,1 MB; baskıda (1 dondurma) CPU %0,79 / RSS 12,7 MB — 25 Kas, `deneyler/m5_maliyet.sh` |
-| M6 Doğruluk | birim test: korunan liste ve odak asla dondurulmaz | tüm testler geçer | ✅ 216 birim + 6 VM testi geçiyor (karar motoru M6 testleri dahil) |
+| M5 Servis maliyeti | nefesd CPU/RSS (boşta, baskıda) | CPU < %1, RSS < 30 MB | ✅ v0.5.0: boşta CPU %0,00 / RSS 10,1 MB; baskıda (1 dondurma) %0,79 / 12,7 MB. v0.6.0 (arayüz penceresi açıkken): boşta %0,07 / 14,4 MB; baskıda (3 dondurma) %1,95 / 15,1 MB (`deneyler/m5_maliyet.sh`). *Not: `nefes-agent` (GTK 3 + Ayatana) ~31,2 MB VmRSS (~15,0 MB özel bellek `RssAnon`, ~16,2 MB paylaşılan kütüphane `RssFile`).* |
+| M6 Doğruluk | birim test: korunan liste ve odak asla dondurulmaz | tüm testler geçer | ✅ 317 birim + 6 VM testi geçiyor (karar motoru M6 ve ayar güvenliği testleri dahil) |
 
 ## Ölçüm turları
 - [ ] Hafta 2 — ilk ölçümler (varsayılan, earlyoom)

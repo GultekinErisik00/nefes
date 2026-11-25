@@ -9,15 +9,20 @@ Bellek dolduğunda Linux thrashing'e girer ve OOM killer genellikle çok geç, y
 - Lisans (planlanan): GPL-3.0-or-later
 - Ekip: Gültekin Erişik, Ali Osman Çıtak
 
-> Durum: v0.5.0 — asgari ürün çalışıyor, ölçüm turu (Hafta 7) sürüyor.
+> Durum: v0.6.0 — asgari ürün (M1–M6) ve masaüstü arayüzü (panel simgesi + durum/ayar penceresi) hazır.
 
 ## Kurulum (Pardus 25 / Debian 13)
 ```bash
 sudo apt install debhelper dpkg-dev          # yalnızca paketi derlemek için
-dpkg-buildpackage -us -uc -b                 # depo kökünde → ../nefes_0.5.0_all.deb
-sudo apt install ../nefes_0.5.0_all.deb      # zram yapılandırması da yazılır
+dpkg-buildpackage -us -uc -b                 # depo kökünde → ../nefes_0.6.0_all.deb
+sudo apt install ../nefes_0.6.0_all.deb      # zram yapılandırması da yazılır
 ```
 Oturum yeniden açıldığında (ya da hemen `nefes-oturum` ile) `nefesd` ve `nefes-agent` systemd kullanıcı servisi olarak başlar; menüden açılan Firefox, LibreOffice ve GIMP kendi cgroup'unda çalışır.
+
+### Kullanım
+- **Panel simgesi:** mavi = normal, turuncu = baskı yüksek, kar tanesi = uygulama donduruldu, gri = duraklatıldı, kırmızı = Nefes çalışmıyor. Menüsünden donuk uygulamayı devam ettir, pencereyi aç, Nefes'i duraklat.
+- **Pencere** (menüde *Nefes* ya da `nefes-agent --pencere`): durum, bellek baskısı, RAM/zram, donuk uygulamalar, son olaylar ve ayarlar (hassasiyet, en uzun donma, asla dondurulmayacak uygulamalar, bildirimler).
+- Ayarlar `~/.config/nefes/ayarlar.ini` dosyasında; parola gerekmez. Menüden açılan tüm uygulamalar kendi cgroup'unda başlar (`nefes-baslat`), yalnızca bunlar dondurulabilir.
 
 - Durum: `systemctl --user status nefesd nefes-agent` · günlük: `journalctl --user -u nefesd`
 - Donuk uygulamalar: `gdbus call --session --dest tr.edu.bil461.Nefes1 --object-path /tr/edu/bil461/Nefes1 --method tr.edu.bil461.Nefes1.Manager.ListFrozen`

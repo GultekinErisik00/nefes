@@ -8,7 +8,7 @@ tags: [nefes, mimari]
 | Bileşen | Nerede | Görev | Sorumlu |
 |---|---|---|---|
 | **nefesd** | systemd sistem servisi (root) | [[PSI]] tetikleyicisini dinler, `app.slice` scope'larını tarar, [[Karar Motoru]] ile aday seçer, dondurur, geri kazanır, devam ettirir; olayları D-Bus sistem veriyolunda yayınlar | G |
-| **nefes-agent** | kullanıcı oturumu (autostart) | olayları Türkçe bildirime çevirir; "Devam ettir" → servis; **X11 odak izleme** (`_NET_ACTIVE_WINDOW` → PID → cgroup) → servis | A |
+| **nefes-agent** | kullanıcı oturumu (autostart) | olayları Türkçe bildirime çevirir; "Devam ettir" → servis; **panel simgesi + durum/ayar penceresi** (2026-11-25, [[ADR-0004 Arayüz ve sözleşme genişletmesi]]); ayar dosyasının tek yazarı. (Odak izleme nefesd'de: `nefesd/focus.py`) | A |
 | **nefes-baslat** | kullanıcı oturumu | uygulamaları `systemd-run --user --scope` ile `app.slice` altında kendi scope'unda başlatır; `.desktop` geçersiz kılmaları | A |
 | ~~GNOME Shell eklentisi~~ | — | ek işleve indi → [[ADR-0002 Asgari ürün Xfce]] | — |
 | **nefes-zram** | kurulum + ilk açılış | RAM'e göre `zram-generator.conf` yazar ([[zram]]) | G |

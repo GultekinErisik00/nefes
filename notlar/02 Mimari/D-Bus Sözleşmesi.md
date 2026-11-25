@@ -34,3 +34,4 @@ Yeniden test (`dbus_e2e.sh`): Resume dondurmadan 0,6 s sonra, geri kazanım bitm
 - `app_name` → scope adından (`app-nefes-firefox-11.scope` → `firefox`); `.desktop`'tan görünen ad ileride ajan tarafında zenginleştirilebilir.
 - UID filtresi → oturum veriyolunda gerek yok; sistem veriyoluna geçilirse ADR-0003 yenilenir.
 - `ReportFocus`, `GetStatus`, `AppKilled`, `PressureChanged` → asgari üründe yok (ADR-0003).
+- **2026-11-25:** arayüz için `GetStatus`, `SetEnabled`, `ReloadSettings`, `RecentEvents` ve `StatusChanged` eklendi; `AppResumed.reason` += `"paused"` → [[ADR-0004 Arayüz ve sözleşme genişletmesi]]
