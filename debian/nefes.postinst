@@ -7,7 +7,8 @@ case "$1" in
         # Zaten çalışan zram0 yeniden başlatılmaz (kullanımdaki swap'ı bozmamak için).
         if /usr/bin/nefes-zram; then
             systemctl daemon-reload || true
-            systemctl start systemd-zram-setup@zram0.service || true
+            # zram zaten swap olarak açıksa dokunma (başlatma "failed" iletisi veriyordu)
+            grep -q '^/dev/zram0 ' /proc/swaps || systemctl start systemd-zram-setup@zram0.service || true
         else
             echo "nefes: zram yapılandırması yazılmadı (yukarıdaki iletiye bakın)" >&2
         fi

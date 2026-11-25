@@ -171,7 +171,7 @@ def run(args: argparse.Namespace) -> int:
     poller.register(fd, select.POLLPRI)
 
     def stop(signum: int, _frame: object) -> None:
-        raise SystemExit(128 + signum)
+        raise SystemExit(0)  # istenen durdurma: 0 → systemd "failed" göstermez (143 gösteriyordu)
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)

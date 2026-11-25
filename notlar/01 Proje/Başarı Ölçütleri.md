@@ -10,12 +10,12 @@ tags: [nefes, olcum]
 
 | Ölçüt | Nasıl ölçülür | Hedef | Son değer |
 |---|---|---|---|
-| M1 Arayüz yanıt gecikmesi | 100 ms aralıklı GTK zamanlayıcı gecikmesi (maks, p99) | p99 < 500 ms, maks < 2 s | – |
-| M2 Toplam donma süresi | gecikme > 1 s aralıkların toplamı | varsayılana göre ≥ %80 azalma | – |
-| M3 Veri kaybı | sonlandırılan uygulama sayısı; Calc kaydedilebiliyor mu | Seviye 3 olmadan 0 | – |
-| M4 Devam ettirme süresi | "Devam ettir" → etkileşime hazır | ölç, hedef < 5 s | – |
-| M5 Servis maliyeti | nefesd CPU/RSS (boşta, baskıda) | CPU < %1, RSS < 30 MB | – |
-| M6 Doğruluk | birim test: korunan liste ve odak asla dondurulmaz | tüm testler geçer | – |
+| M1 Arayüz yanıt gecikmesi | 100 ms aralıklı GTK zamanlayıcı gecikmesi (maks, p99) | p99 < 500 ms, maks < 2 s | ✅ Nefes p99 58 ± 5 ms, maks 91 ± 7 ms (5/5); varsayılan 2/5 ([[Deney 05 Ölçüm Turu]]) |
+| M2 Toplam donma süresi | gecikme > 1 s aralıkların toplamı | varsayılana göre ≥ %80 azalma | ✅ 0,7 ± 0,7 s → 0 s (−%100); taban düşük, gerçek uygulamalarla tekrarlanmalı ([[Deney 05 Ölçüm Turu]]) |
+| M3 Veri kaybı | sonlandırılan uygulama sayısı; Calc kaydedilebiliyor mu | Seviye 3 olmadan 0 | ✅ 0 (her üç yapılandırmada; earlyoom bu yükte tetiklenmedi) ([[Deney 05 Ölçüm Turu]]) |
+| M4 Devam ettirme süresi | "Devam ettir" → etkileşime hazır | ölç, hedef < 5 s | ✅ 1,57 s (zram, 400 MB) ([[Deney 03 Uçtan Uca nefesd]]) |
+| M5 Servis maliyeti | nefesd CPU/RSS (boşta, baskıda) | CPU < %1, RSS < 30 MB | ⏳ ölçülmedi |
+| M6 Doğruluk | birim test: korunan liste ve odak asla dondurulmaz | tüm testler geçer | ✅ 216 birim + 6 VM testi geçiyor (karar motoru M6 testleri dahil) |
 
 ## Ölçüm turları
 - [ ] Hafta 2 — ilk ölçümler (varsayılan, earlyoom)
