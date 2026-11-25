@@ -60,6 +60,8 @@ class Daemon:
         focus: Callable[[], tuple[str | None, bool]],
         notify: Callable[[Event], None],
         run_async: Callable[[Callable[[], None]], None] | None = None,
+        on_status: Callable[[bool, str], None] | None = None,
+        enabled: bool = True,
     ) -> None:
         self._config = config
         self._ops = ops
@@ -69,6 +71,10 @@ class Daemon:
         self._run_async = run_async or _run_now
         self._frozen_since: dict[str, float] = {}
         self._cooldown_until: dict[str, float] = {}
+        self._on_status = on_status or (lambda _enabled, _level: None)
+        self._enabled = enabled
+        self._level = "safe"  # Pressure değeri: "safe" | "normal" | "high"
+        self._avg10 = 0.0
 
     def startup(self) -> None:
         """Önceki çalışmadan donuk kalmış scope'ları çözer (ne zamandan beri donuk bilinmez)."""
@@ -83,6 +89,15 @@ class Daemon:
     def tick(self, fired: bool, some_avg10: float) -> tuple[Action, ...]:
         """Bir tur: durumu oku, karar ver, uygula. Uygulanmak istenen eylemleri döndürür."""
         now = self._clock()
+        pressure = classify(fired, some_avg10, self._config.safe_below)
+        self._avg10 = some_avg10
+        if pressure.value != self._level:
+            self._level = pressure.value
+            self._on_status(self._enabled, self._level)
+        if not self._enabled:  # duraklatıldı: karar yok; çözülemeyen kalırsa yeniden dene
+            for path in list(self._frozen_since):
+                self._thaw(path, "paused", now)
+            return ()
         apps = self._ops.read_apps(dict(self._frozen_since))
         self._forget_missing({a.path for a in apps}, now)
         eligible = tuple(a for a in apps if not self._cooling_down(a, now))
@@ -91,7 +106,7 @@ class Daemon:
             apps=eligible,
             focus_path=focus_path,
             focus_known=focus_known,
-            pressure=classify(fired, some_avg10, self._config.safe_below),
+            pressure=pressure,
             now=now,
         )
         actions = decide(snapshot, self._config.policy)
@@ -102,6 +117,25 @@ class Daemon:
             else:
                 self._thaw(action.path, action.reason, now)
         return actions
+
+    def set_enabled(self, enabled: bool) -> None:
+        """Duraklat/sürdür. Duraklatınca dondurulan her şey "paused" nedeniyle çözülür."""
+        if enabled == self._enabled:
+            return
+        self._enabled = enabled
+        if not enabled:
+            now = self._clock()
+            for path in list(self._frozen_since):
+                self._thaw(path, "paused", now)
+        self._on_status(self._enabled, self._level)
+
+    def reconfigure(self, config: Config) -> None:
+        """Yeni ayarlar sonraki turdan itibaren geçerli; donuk uygulamalar korunur."""
+        self._config = config
+
+    def status(self) -> tuple[bool, str, float]:
+        """(etkin mi, son baskı seviyesi, son some avg10) — D-Bus GetStatus için."""
+        return self._enabled, self._level, self._avg10
 
     def resume(self, path: str) -> bool:
         """Kullanıcının "Devam ettir" isteği; yalnızca bu daemon'ın dondurduğu uygulamalar."""
@@ -125,9 +159,11 @@ class Daemon:
         return tuple(sorted(self._frozen_since))
 
     def poll_timeout(self) -> float | None:
-        """PSI beklemesi için zaman aşımı (s): donuk yoksa None (sonsuz), varsa en yakın uyanış."""
+        """PSI beklemesi için zaman aşımı (s): donuk yoksa ve baskı güvenliyse None (sonsuz).
+        Baskı güvenli değilken de uyanılır: yoksa son seviye (ör. "high") boşta hep öyle kalır
+        ve StatusChanged hiç gelmez (VM'de bulundu, 2026-11-25)."""
         if not self._frozen_since:
-            return None
+            return None if self._level == "safe" else self._config.safe_check_seconds
         deadline = min(self._frozen_since.values()) + self._config.policy.max_frozen_seconds
         remaining = max(0.0, deadline - self._clock())
         return min(self._config.safe_check_seconds, remaining)

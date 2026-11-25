@@ -19,9 +19,12 @@ import sys
 import time
 from pathlib import Path
 
+import nefes_ayar
+from nefes_ayar import Settings
 from nefesd import cgroups
 from nefesd.eylem import Config, Daemon, Event
 from nefesd.focus import X11Focus
+from nefesd.gecmis import EventLog
 from nefesd.karar import AppCgroup, Policy
 from nefesd.psi import parse_pressure, trigger_line
 
@@ -90,10 +93,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="nefesd", description="Donma önleyici bellek baskısı servisi")
     p.add_argument("--root", type=Path, default=Path("/sys/fs/cgroup"))
     p.add_argument("--uid", type=int, default=os.getuid())
-    p.add_argument("--stall-ms", type=int, default=300,
-                   help="pencerede bu kadar bekleme → baskı (150 ms kısa ayırma dalgalarında tetikledi, Deney 03)")
+    p.add_argument("--stall-ms", type=int, default=None,
+                   help="pencerede bu kadar bekleme → baskı; verilirse ayar dosyasındaki hassasiyetin "
+                        "yerine geçer (150 ms kısa ayırma dalgalarında tetikledi, Deney 03)")
     p.add_argument("--window-ms", type=int, default=2000, help="PSI penceresi (root değilse 2 sn'nin katı)")
-    p.add_argument("--max-frozen", type=float, default=600.0, help="azami dondurma süresi (s)")
+    p.add_argument("--max-frozen", type=float, default=None,
+                   help="azami dondurma süresi (s); verilirse ayar dosyasının yerine geçer")
+    p.add_argument("--settings", type=Path, default=None,
+                   help="ayar dosyası (varsayılan ~/.config/nefes/ayarlar.ini)")
     p.add_argument("--cooldown", type=float, default=60.0)
     p.add_argument("--safe-below", type=float, default=5.0,
                    help="some avg10 bunun altında → güvenli (1.0 çözmeyi 30 s+ geciktirdi, Deney 03)")
@@ -120,23 +127,95 @@ def background(executor: ThreadPoolExecutor) -> Callable[[Callable[[], None]], N
     return submit
 
 
-def build_daemon(args: argparse.Namespace,
-                 run_async: Callable[[Callable[[], None]], None] | None = None,
-                 notify: Callable[[Event], None] = log_event) -> Daemon:
-    config = Config(
-        policy=Policy(uid=args.uid, protected_names=PROTECTED,
-                      max_frozen_seconds=args.max_frozen,
+def settings_path(args: argparse.Namespace) -> Path:
+    return args.settings or nefes_ayar.config_path()
+
+
+def effective(args: argparse.Namespace, settings: Settings) -> tuple[int, float, frozenset[str]]:
+    """(stall_ms, azami donma s, korunan adlar): açıkça verilen komut satırı değeri dosyadan önceliklidir;
+    kullanıcının "asla dondurma" listesi yerleşik korunan listeye yalnızca eklenir."""
+    stall = args.stall_ms if args.stall_ms is not None else settings.stall_ms
+    max_frozen = args.max_frozen if args.max_frozen is not None else settings.max_frozen_seconds
+    return stall, max_frozen, PROTECTED | frozenset(settings.never_freeze)
+
+
+def build_config(args: argparse.Namespace, settings: Settings) -> Config:
+    _stall, max_frozen, protected = effective(args, settings)
+    return Config(
+        policy=Policy(uid=args.uid, protected_names=protected,
+                      max_frozen_seconds=max_frozen,
                       min_candidate_bytes=args.min_candidate_mb * MB,
                       min_frozen_seconds=args.min_frozen),
         cooldown_seconds=args.cooldown,
         safe_below=args.safe_below,
         safe_check_seconds=2.0,
     )
-    return Daemon(config, CgroupOps(args.root, args.uid), clock=time.monotonic,
-                  focus=X11Focus(), notify=notify, run_async=run_async)
 
 
-def start_dbus(controller: object, listeners: list[Callable[[Event], None]]) -> Callable[[], None] | None:
+def build_daemon(args: argparse.Namespace,
+                 settings: Settings = Settings(),
+                 run_async: Callable[[Callable[[], None]], None] | None = None,
+                 notify: Callable[[Event], None] = log_event,
+                 on_status: Callable[[bool, str], None] | None = None,
+                 focus: Callable[[], tuple[str | None, bool]] | None = None) -> Daemon:
+    return Daemon(build_config(args, settings), CgroupOps(args.root, args.uid), clock=time.monotonic,
+                  focus=focus or X11Focus(), notify=notify, run_async=run_async,
+                  on_status=on_status, enabled=settings.enabled)
+
+
+class Controller:
+    """D-Bus denetleyicisi: kilitli daemon + olay geçmişi + ayar yeniden yükleme (ADR-0004).
+    D-Bus iş parçacığından çağrılır; PSI tetikleyicisini yeniden kurma isteği ana döngüye bırakılır."""
+
+    def __init__(self, daemon, args: argparse.Namespace, settings: Settings, events: EventLog,
+                 wake: Callable[[], None] = lambda: None) -> None:
+        self._daemon, self._args, self._events, self._wake = daemon, args, events, wake
+        self._rearm_lock = threading.Lock()
+        self._stall_ms = effective(args, settings)[0]
+        self._rearm: int | None = None
+
+    def resume(self, path: str) -> bool:
+        return self._daemon.resume(path)
+
+    def frozen_durations(self) -> tuple[tuple[str, float], ...]:
+        return self._daemon.frozen_durations()
+
+    def status(self) -> tuple[bool, str, float]:
+        return self._daemon.status()
+
+    def set_enabled(self, enabled: bool) -> None:
+        self._daemon.set_enabled(enabled)
+
+    def recent_events(self) -> tuple[tuple[int, str, str, str], ...]:
+        return self._events.items()
+
+    def reload_settings(self) -> tuple[bool, str]:
+        """Bozuk alan varsa hiçbir şey uygulanmaz (eski ayarlar kalır) ve neden döner."""
+        settings, warnings = nefes_ayar.load(settings_path(self._args))
+        if warnings:
+            return False, "; ".join(warnings)
+        self._daemon.reconfigure(build_config(self._args, settings))
+        self._daemon.set_enabled(settings.enabled)
+        stall = effective(self._args, settings)[0]
+        need_wake = False
+        with self._rearm_lock:
+            if stall != self._stall_ms:
+                self._stall_ms = self._rearm = stall
+                need_wake = True
+        if need_wake:
+            self._wake()  # ana döngü boşta süresiz bekliyor olabilir
+        log.info("ayarlar yeniden yüklendi: %s", settings)
+        return True, ""
+
+    def take_rearm(self) -> int | None:
+        """Ana döngü için: yeni stall_ms istendiyse bir kez döndürür."""
+        with self._rearm_lock:
+            stall, self._rearm = self._rearm, None
+        return stall
+
+
+def start_dbus(controller: object, listeners: list[Callable[[Event], None]],
+               status_listeners: list[Callable[[bool, str], None]]) -> Callable[[], None] | None:
     """D-Bus servisini oturum veriyolunda başlatır; veriyolu yoksa servis D-Bus'sız sürer."""
     try:
         from nefesd import dbus_servis
@@ -145,7 +224,22 @@ def start_dbus(controller: object, listeners: list[Callable[[Event], None]]) -> 
         return None
     service = dbus_servis.NefesService(controller)
     listeners.append(service.emit)
+    status_listeners.append(service.emit_status)
     return dbus_servis.start(service)
+
+
+def short_name(path: str) -> str:
+    try:
+        from nefesd.dbus_servis import app_name
+    except (ImportError, ValueError):
+        return path.rsplit("/", 1)[-1]
+    return app_name(path)
+
+
+def open_trigger(stall_ms: int, window_ms: int) -> int:
+    fd = os.open(PSI_FILE, os.O_RDWR | os.O_NONBLOCK)
+    os.write(fd, trigger_line("some", stall_ms * 1000, window_ms * 1000))
+    return fd
 
 
 def poll_ms(seconds: float | None) -> int | None:
@@ -157,18 +251,38 @@ def poll_ms(seconds: float | None) -> int | None:
 
 def run(args: argparse.Namespace) -> int:
     reclaimer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nefes-reclaim")
-    listeners: list[Callable[[Event], None]] = [log_event]
+    settings, warnings = nefes_ayar.load(settings_path(args))
+    for warning in warnings:
+        log.warning("ayar: %s", warning)
+    events = EventLog()
+    listeners: list[Callable[[Event], None]] = [log_event, lambda e: events.record(e, short_name(e.path))]
+    status_listeners: list[Callable[[bool, str], None]] = []
 
     def notify(event: Event) -> None:
         for listener in listeners:
             listener(event)
 
-    daemon = Locked(build_daemon(args, run_async=background(reclaimer), notify=notify), threading.Lock())
-    stop_dbus = start_dbus(daemon, listeners) if not args.no_dbus else None
-    fd = os.open(PSI_FILE, os.O_RDWR | os.O_NONBLOCK)
-    os.write(fd, trigger_line("some", args.stall_ms * 1000, args.window_ms * 1000))
+    def on_status(enabled: bool, level: str) -> None:
+        for listener in status_listeners:
+            listener(enabled, level)
+
+    daemon = Locked(build_daemon(args, settings, run_async=background(reclaimer), notify=notify,
+                                 on_status=on_status), threading.Lock())
+    wake_r, wake_w = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
+
+    def wake() -> None:
+        try:
+            os.write(wake_w, b"x")
+        except BlockingIOError:
+            pass  # boru dolu: ana döngü zaten uyanacak
+
+    controller = Controller(daemon, args, settings, events, wake=wake)
+    stop_dbus = start_dbus(controller, listeners, status_listeners) if not args.no_dbus else None
+    stall_ms = effective(args, settings)[0]
+    fd = open_trigger(stall_ms, args.window_ms)
     poller = select.poll()
     poller.register(fd, select.POLLPRI)
+    poller.register(wake_r, select.POLLIN)
 
     def stop(signum: int, _frame: object) -> None:
         raise SystemExit(0)  # istenen durdurma: 0 → systemd "failed" göstermez (143 gösteriyordu)
@@ -176,15 +290,36 @@ def run(args: argparse.Namespace) -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     daemon.startup()
-    log.info("nefesd başladı (uid=%d, tetikleyici some %d ms / %d ms)", args.uid, args.stall_ms, args.window_ms)
+    log.info("nefesd başladı (uid=%d, tetikleyici some %d ms / %d ms, etkin=%s)",
+             args.uid, stall_ms, args.window_ms, settings.enabled)
     errors = 0
     try:
         while True:
-            events = poller.poll(poll_ms(daemon.poll_timeout()))
-            if any(ev & POLL_FAIL for _, ev in events):
+            rearm = controller.take_rearm()
+            if rearm is not None:  # hassasiyet değişti: önce yenisini aç, hata olursa eski fd kalsın
+                try:
+                    new_fd = open_trigger(rearm, args.window_ms)
+                except OSError as exc:
+                    log.error("PSI tetikleyicisi yeniden kurulamadı (%d ms): %s", rearm, exc)
+                else:
+                    poller.unregister(fd)
+                    os.close(fd)
+                    fd = new_fd
+                    poller.register(fd, select.POLLPRI)
+                    log.info("PSI tetikleyicisi yeniden kuruldu: some %d ms / %d ms", rearm, args.window_ms)
+            polled = poller.poll(poll_ms(daemon.poll_timeout()))
+            if any(f == wake_r for f, _ in polled):
+                while True:  # uyandırma baytlarını boşalt
+                    try:
+                        os.read(wake_r, 64)
+                    except BlockingIOError:
+                        break
+                if not any(f == fd for f, _ in polled):
+                    continue  # aynı turda PSI olayı da geldiyse onu düşürme
+            if any(f == fd and ev & POLL_FAIL for f, ev in polled):
                 log.error("PSI tetikleyicisi geçersiz oldu (POLLERR/POLLHUP/POLLNVAL)")
                 return 1
-            fired = any(ev & select.POLLPRI for _, ev in events)
+            fired = any(f == fd and ev & select.POLLPRI for f, ev in polled)
             try:
                 stats = parse_pressure(PSI_FILE.read_text())
                 actions = daemon.tick(fired, stats.some_avg10)
@@ -207,6 +342,8 @@ def run(args: argparse.Namespace) -> int:
         if stop_dbus is not None:
             stop_dbus()
         os.close(fd)
+        os.close(wake_r)
+        os.close(wake_w)
         left = daemon.frozen_paths()
         if left:
             log.error("kapanışta çözülemeyenler: %s", ", ".join(left))

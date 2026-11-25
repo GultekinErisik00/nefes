@@ -1,7 +1,7 @@
 """nefesd D-Bus servisi — sözleşme: tr.edu.bil461.Nefes1.xml (tek yetkili kaynak, ADR-0003).
 
 Oturum veriyolunda `tr.edu.bil461.Nefes1` adını alır, `/tr/edu/bil461/Nefes1` nesnesini XML'deki
-arayüzle kaydeder. Yöntemler (Resume, ListFrozen) denetleyiciye (Daemon) iletilir; olaylar
+arayüzle kaydeder. Yöntemler (Resume, ListFrozen, GetStatus, SetEnabled, ReloadSettings, RecentEvents) denetleyiciye (Daemon) iletilir; olaylar
 (Event) sinyal olarak yayınlanır. Arayüz şekli burada tanımlanmaz: XML'den yüklenir.
 
 İş parçacıkları: servis kendi GLib ana bağlamıyla ayrı bir iş parçacığında çalışır (`start`).
@@ -39,6 +39,10 @@ _INSTANCE_SUFFIX = re.compile(r"-(?:\d+|[0-9a-f]{8})$")
 class Controller(Protocol):
     def resume(self, path: str) -> bool: ...
     def frozen_durations(self) -> tuple[tuple[str, float], ...]: ...
+    def status(self) -> tuple[bool, str, float]: ...
+    def set_enabled(self, enabled: bool) -> None: ...
+    def reload_settings(self) -> tuple[bool, str]: ...
+    def recent_events(self) -> tuple[tuple[int, str, str, str], ...]: ...
 
 
 def app_name(cgroup: str) -> str:
@@ -61,7 +65,7 @@ def signal_for(event: Event) -> tuple[str, GLib.Variant]:
 
 
 class NefesService:
-    METHODS = ("Resume", "ListFrozen")
+    METHODS = ("Resume", "ListFrozen", "GetStatus", "SetEnabled", "ReloadSettings", "RecentEvents")
 
     def __init__(self, controller: Controller) -> None:
         self._controller = controller
@@ -77,6 +81,18 @@ class NefesService:
             apps = [(path, app_name(path), int(seconds))
                     for path, seconds in self._controller.frozen_durations()]
             return GLib.Variant("(a(ssu))", (apps,))
+        if method == "GetStatus":
+            enabled, level, avg10 = self._controller.status()
+            return GLib.Variant("(bsd)", (bool(enabled), level, float(avg10)))
+        if method == "SetEnabled":
+            (enabled,) = args
+            self._controller.set_enabled(bool(enabled))
+            return GLib.Variant("()", ())
+        if method == "ReloadSettings":
+            ok, message = self._controller.reload_settings()
+            return GLib.Variant("(bs)", (bool(ok), message))
+        if method == "RecentEvents":
+            return GLib.Variant("(a(tsss))", (list(self._controller.recent_events()),))
         raise ValueError(f"bilinmeyen yöntem: {method}")
 
     def export(self, connection: Gio.DBusConnection) -> int:
@@ -94,6 +110,16 @@ class NefesService:
             self._connection.emit_signal(None, OBJECT_PATH, INTERFACE, name, args)
         except GLib.Error as exc:
             log.warning("D-Bus sinyali gönderilemedi (%s): %s", name, exc.message)
+
+    def emit_status(self, enabled: bool, level: str) -> None:
+        """StatusChanged: etkinlik ya da baskı seviyesi değişti (ADR-0004)."""
+        if self._connection is None:
+            return
+        try:
+            self._connection.emit_signal(None, OBJECT_PATH, INTERFACE, "StatusChanged",
+                                         GLib.Variant("(bs)", (bool(enabled), level)))
+        except GLib.Error as exc:
+            log.warning("D-Bus sinyali gönderilemedi (StatusChanged): %s", exc.message)
 
     def _on_call(self, _conn, _sender, _path, _iface, method, params, invocation) -> None:
         try:

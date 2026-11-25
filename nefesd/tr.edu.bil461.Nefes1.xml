@@ -16,11 +16,23 @@
     itilecek miktarın üst sınırı. Gerçekte geri kazanılan miktar sinyalde yoktur (nefesd günlüğüne yazılır).
   - Sıra garantisi: aynı cgroup için AppFrozen her zaman AppResumed'dan ÖNCE gelir; ikisi de dondurma/
     çözme anında, nefesd'nin ana döngüsünden yayınlanır (2026-11-23 sözleşme değişikliği, ADR-0003).
-  - reason (AppResumed): "focus" | "timeout" | "pressure_low" | "user" | "shutdown".
+  - reason (AppResumed): "focus" | "timeout" | "pressure_low" | "user" | "shutdown" | "paused".
     Yeni değerler eklenebilir; tüketici bilmediği değeri "çözüldü" olarak ele almalı.
   - Resume dönüşü: true = çözüldü; false = bu nefesd dondurmamış, zaten çözülmüş ya da çözme başarısız.
   - ListFrozen: (cgroup, app_name, frozen_seconds) — şu an donuk uygulamalar; ajan yeniden
     başladığında bildirimleri geri kurmak için.
+
+  Arayüz eklemeleri (2026-11-25, ADR-0004 — yalnızca ekleme, yukarıdakiler değişmedi):
+  - pressure_level: "safe" | "normal" | "high" (psi.classify; arayüzde düşük / orta / yüksek).
+  - GetStatus: (etkin mi, son baskı seviyesi, son some avg10). Arayüz yalnızca penceresi
+    görünürken çağırır; simge StatusChanged ile güncellenir (yoklama yok).
+  - SetEnabled(false): yeni dondurma yok, donuk her şey AppResumed(reason="paused") ile çözülür.
+    Anında ve yalnızca bellekte; kalıcılık için ajan önce ayar dosyasına `etkin` yazar.
+  - ReloadSettings: ~/.config/nefes/ayarlar.ini'yi yeniden okur. ok=false → eski ayarlar kalır,
+    message Türkçe nedendir. Dosyaya yalnızca ajan yazar; nefesd yalnızca okur.
+  - RecentEvents: (unix zamanı, "frozen"|"resumed", app_name, reason) — son 20 olay, en yeni sonda.
+    frozen olaylarının reason'ı "pressure". nefesd yeniden başlayınca boşalır.
+  - StatusChanged: etkinlik ya da baskı SEVİYESİ değişince (her PSI okumasında değil).
 -->
 <node name="/tr/edu/bil461/Nefes1">
   <interface name="tr.edu.bil461.Nefes1.Manager">
@@ -31,6 +43,21 @@
     <method name="ListFrozen">
       <arg name="apps" type="a(ssu)" direction="out"/>
     </method>
+    <method name="GetStatus">
+      <arg name="enabled" type="b" direction="out"/>
+      <arg name="pressure_level" type="s" direction="out"/>
+      <arg name="some_avg10" type="d" direction="out"/>
+    </method>
+    <method name="SetEnabled">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="ReloadSettings">
+      <arg name="ok" type="b" direction="out"/>
+      <arg name="message" type="s" direction="out"/>
+    </method>
+    <method name="RecentEvents">
+      <arg name="events" type="a(tsss)" direction="out"/>
+    </method>
     <signal name="AppFrozen">
       <arg name="cgroup" type="s"/>
       <arg name="app_name" type="s"/>
@@ -39,6 +66,10 @@
     <signal name="AppResumed">
       <arg name="cgroup" type="s"/>
       <arg name="reason" type="s"/>
+    </signal>
+    <signal name="StatusChanged">
+      <arg name="enabled" type="b"/>
+      <arg name="pressure_level" type="s"/>
     </signal>
   </interface>
 </node>

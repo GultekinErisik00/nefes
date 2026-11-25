@@ -47,6 +47,23 @@ class FakeController:
     def frozen_durations(self):
         return tuple(sorted(self.frozen.items()))
 
+    # arayüz eklemeleri (ADR-0004)
+    status_value = (True, "normal", 12.5)
+    reload_value = (True, "")
+    events_value = ()
+
+    def status(self):
+        return self.status_value
+
+    def set_enabled(self, enabled):
+        self.enabled_calls = getattr(self, "enabled_calls", []) + [enabled]
+
+    def reload_settings(self):
+        return self.reload_value
+
+    def recent_events(self):
+        return self.events_value
+
 
 # --- uygulama adı ---------------------------------------------------------------
 
@@ -73,7 +90,7 @@ def test_contract_declares_exactly_the_members_the_service_implements():
     iface = contract_interface()
     assert iface is not None
     assert sorted(m.name for m in iface.methods) == sorted(NefesService.METHODS)
-    assert sorted(s.name for s in iface.signals) == ["AppFrozen", "AppResumed"]
+    assert sorted(s.name for s in iface.signals) == ["AppFrozen", "AppResumed", "StatusChanged"]
 
 
 @pytest.mark.parametrize(
@@ -194,3 +211,62 @@ def test_bus_name_constant_matches_contract_object_path():
     node = Gio.DBusNodeInfo.new_for_xml(CONTRACT.read_text())
     assert node.path == OBJECT_PATH
     assert BUS_NAME == "tr.edu.bil461.Nefes1"
+
+
+# --- arayüz eklemeleri (ADR-0004) ---------------------------------------------------
+
+def test_contract_declares_new_members():
+    methods = {m.name: m for m in contract_interface().methods}
+    assert signature(methods["GetStatus"].out_args) == "(bsd)"
+    assert signature(methods["SetEnabled"].in_args) == "(b)"
+    assert signature(methods["SetEnabled"].out_args) == "()"
+    assert signature(methods["ReloadSettings"].out_args) == "(bs)"
+    assert signature(methods["RecentEvents"].out_args) == "(a(tsss))"
+    signals = {s.name: s for s in contract_interface().signals}
+    assert signature(signals["StatusChanged"].args) == "(bs)"
+
+
+def test_get_status_over_bus(private_bus):
+    server, client = private_bus
+    NefesService(FakeController()).export(server)
+    assert call(client, server, "GetStatus", None, "(bsd)") == (True, "normal", 12.5)
+
+
+def test_set_enabled_forwards_to_controller(private_bus):
+    server, client = private_bus
+    controller = FakeController()
+    NefesService(controller).export(server)
+    assert call(client, server, "SetEnabled", GLib.Variant("(b)", (False,)), "()") == ()
+    assert controller.enabled_calls == [False]
+
+
+def test_reload_settings_returns_ok_and_message(private_bus):
+    server, client = private_bus
+    controller = FakeController()
+    controller.reload_value = (False, "hassasiyet geçersiz")
+    NefesService(controller).export(server)
+    assert call(client, server, "ReloadSettings", None, "(bs)") == (False, "hassasiyet geçersiz")
+
+
+def test_recent_events_over_bus(private_bus):
+    server, client = private_bus
+    controller = FakeController()
+    controller.events_value = ((1700000000, "frozen", "firefox", "pressure"),)
+    NefesService(controller).export(server)
+    assert call(client, server, "RecentEvents", None, "(a(tsss))") == (
+        [(1700000000, "frozen", "firefox", "pressure")],
+    )
+
+
+def test_status_changed_signal_is_received(private_bus):
+    server, client = private_bus
+    service = NefesService(FakeController())
+    service.export(server)
+    received = []
+    client.signal_subscribe(None, INTERFACE, "StatusChanged", OBJECT_PATH, None,
+                            Gio.DBusSignalFlags.NONE,
+                            lambda *a: received.append(a[5].unpack()))
+    run_until(lambda: False, 0.2)
+    service.emit_status(False, "high")
+    assert run_until(lambda: received)
+    assert received == [(False, "high")]

@@ -306,3 +306,90 @@ def test_poll_timeout_wakes_exactly_at_the_freeze_deadline_when_it_is_sooner():
     assert daemon.poll_timeout() == 0.5
     clock.t += 10
     assert daemon.poll_timeout() == 0.0
+
+
+# --- duraklatma, durum, yeniden yapılandırma (arayüz, 2026-11-25) ---------------------
+
+def make_with_status(apps, enabled=True, focus=(None, True)):
+    ops, clock, events, statuses = FakeOps(apps), Clock(), [], []
+    daemon = Daemon(CONFIG, ops, clock=clock, focus=lambda: focus, notify=events.append,
+                    on_status=lambda e, level: statuses.append((e, level)), enabled=enabled)
+    return daemon, ops, clock, events, statuses
+
+
+def test_pause_thaws_everything_with_reason_paused():
+    daemon, ops, _, events, _ = make_with_status({FIREFOX: 900 * MB})
+    daemon.tick(fired=True, some_avg10=30.0)
+    daemon.set_enabled(False)
+    assert ("thaw", FIREFOX) in ops.calls
+    assert events[-1] == Event("resumed", FIREFOX, "paused", 0)
+    assert daemon.frozen_paths() == ()
+
+
+def test_paused_daemon_never_freezes_under_pressure():
+    daemon, ops, _, _, _ = make_with_status({FIREFOX: 900 * MB})
+    daemon.set_enabled(False)
+    assert daemon.tick(fired=True, some_avg10=80.0) == ()
+    assert not any(call[0] == "freeze" for call in ops.calls)
+
+
+def test_resume_after_pause_returns_false():
+    daemon, _, _, _, _ = make_with_status({FIREFOX: 900 * MB})
+    daemon.tick(fired=True, some_avg10=30.0)
+    daemon.set_enabled(False)
+    assert daemon.resume(FIREFOX) is False
+
+
+def test_reenabled_daemon_freezes_again():
+    daemon, _, _, _, _ = make_with_status({FIREFOX: 900 * MB, CALC: 300 * MB})
+    daemon.set_enabled(False)
+    daemon.set_enabled(True)
+    assert daemon.tick(fired=True, some_avg10=30.0) == (Freeze(FIREFOX),)
+
+
+def test_daemon_created_disabled_does_not_freeze():
+    daemon, ops, _, _, _ = make_with_status({FIREFOX: 900 * MB}, enabled=False)
+    assert daemon.tick(fired=True, some_avg10=80.0) == ()
+    assert ops.calls == []
+
+
+def test_on_status_called_on_enable_change_and_level_change_only():
+    daemon, _, _, _, statuses = make_with_status({})
+    daemon.tick(fired=False, some_avg10=30.0)
+    daemon.tick(fired=False, some_avg10=40.0)
+    assert statuses == [(True, "normal")]
+    daemon.tick(fired=True, some_avg10=40.0)
+    assert statuses[-1] == (True, "high")
+    daemon.set_enabled(False)
+    assert statuses == [(True, "normal"), (True, "high"), (False, "high")]
+    daemon.set_enabled(False)  # değişmedi → çağrı yok
+    assert len(statuses) == 3
+
+
+def test_status_reports_last_level_and_avg10():
+    daemon, _, _, _, _ = make_with_status({})
+    assert daemon.status() == (True, "safe", 0.0)
+    daemon.tick(fired=True, some_avg10=42.5)
+    assert daemon.status() == (True, "high", 42.5)
+
+
+def test_reconfigure_applies_new_max_frozen():
+    daemon, _, clock, events, _ = make_with_status({FIREFOX: 900 * MB})
+    daemon.tick(fired=True, some_avg10=30.0)
+    short = Config(policy=Policy(uid=1000, protected_names=frozenset({"nefes-agent"}),
+                                 max_frozen_seconds=60.0, min_candidate_bytes=50 * MB),
+                   cooldown_seconds=60.0, safe_below=1.0, safe_check_seconds=2.0)
+    daemon.reconfigure(short)
+    clock.t += 61
+    assert daemon.tick(fired=False, some_avg10=30.0) == (Thaw(FIREFOX, "timeout"),)
+
+
+def test_poll_timeout_keeps_waking_until_pressure_is_safe_again():
+    """VM'de bulundu (25 Kas): ilk tetik "high" bıraktı, boşta uyanılmadığı için seviye hep "high" kaldı."""
+    daemon, _, _, _, statuses = make_with_status({})
+    daemon.tick(fired=True, some_avg10=0.0)
+    assert daemon.poll_timeout() == 2.0
+    daemon.tick(fired=False, some_avg10=0.0)
+    assert daemon.status()[1] == "safe"
+    assert daemon.poll_timeout() is None
+    assert statuses == [(True, "high"), (True, "safe")]
