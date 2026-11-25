@@ -9,6 +9,8 @@ from nefes_baslat import (
     MARKER,
     install_desktop_files,
     main,
+    menu_apps,
+    prune_stale,
     remove_desktop_files,
     rewrite_desktop,
     systemd_run_argv,
@@ -124,6 +126,78 @@ def test_remove_deletes_only_files_written_by_nefes_baslat(tmp_path):
     (dst / "own.desktop").write_text("[Desktop Entry]\nExec=own\n")
     assert remove_desktop_files(dst) == ["libreoffice-calc.desktop"]
     assert sorted(p.name for p in dst.iterdir()) == ["own.desktop"]
+
+
+# --- tüm menü kısayolları -----------------------------------------------------------
+
+def entry(**fields):
+    body = {"Type": "Application", "Name": "X", "Exec": "x %U", **fields}
+    return "[Desktop Entry]\n" + "".join(f"{k}={v}\n" for k, v in body.items() if v is not None)
+
+
+def write_entries(directory, entries):
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, text in entries.items():
+        (directory / f"{name}.desktop").write_text(text)
+    return directory
+
+
+def test_menu_apps_lists_visible_applications_sorted(tmp_path):
+    src = write_entries(tmp_path / "share", {"gimp": entry(), "code": entry(), "vlc": entry()})
+    assert menu_apps([src]) == ("code", "gimp", "vlc")
+
+
+@pytest.mark.parametrize("fields", [
+    {"NoDisplay": "true"},          # menüde görünmez
+    {"Hidden": "true"},             # silinmiş sayılır
+    {"Type": "Link"},               # uygulama değil
+    {"Exec": None},                 # çalıştırılacak komut yok
+    {"Terminal": "true"},           # terminal içinde açılır; sarmalayıcı terminali değil komutu sarardı
+])
+def test_menu_apps_skips_entries_that_are_not_launchable_menu_apps(tmp_path, fields):
+    src = write_entries(tmp_path / "share", {"gimp": entry(), "bozuk": entry(**fields)})
+    assert menu_apps([src]) == ("gimp",)
+
+
+@pytest.mark.parametrize("name", [
+    "xfce4-panel", "xfce-settings-manager", "xfwm4-settings", "xfdesktop-settings", "nefes-ayarlar",
+    "thunar", "thunar-settings", "panel-preferences", "onboard", "onboard-settings",
+])
+def test_menu_apps_skips_desktop_components_and_nefes_itself(tmp_path, name):
+    """Masaüstü bileşenleri session scope'unda kalmalı (CLAUDE.md güvenlik kuralı 1)."""
+    src = write_entries(tmp_path / "share", {"gimp": entry(), name: entry()})
+    assert menu_apps([src]) == ("gimp",)
+
+
+def test_menu_apps_skips_entries_without_desktop_entry_group_or_unreadable(tmp_path):
+    src = write_entries(tmp_path / "share", {"gimp": entry(), "bos": "Name=X\n"})
+    (src / "ikili.desktop").write_bytes(b"\xff\xfe\x00")
+    assert menu_apps([src]) == ("gimp",)
+
+
+def test_menu_apps_merges_directories_and_ignores_missing_ones(tmp_path):
+    a = write_entries(tmp_path / "a", {"gimp": entry()})
+    b = write_entries(tmp_path / "b", {"gimp": entry(), "vlc": entry()})
+    assert menu_apps([a, b, tmp_path / "yok"]) == ("gimp", "vlc")
+
+
+def test_menu_apps_hidden_in_first_directory_wins(tmp_path):
+    """XDG: aynı ad için öncelikli dizindeki kayıt geçerlidir."""
+    a = write_entries(tmp_path / "a", {"gimp": entry(NoDisplay="true")})
+    b = write_entries(tmp_path / "b", {"gimp": entry()})
+    assert menu_apps([a, b]) == ()
+
+
+def test_prune_removes_only_our_copies_that_are_no_longer_wanted(tmp_path):
+    src, dst = make_source(tmp_path), tmp_path / "local"
+    install_desktop_files([src], dst, ["libreoffice-calc", "gimp"], LAUNCHER)
+    (dst / "own.desktop").write_text("[Desktop Entry]\nExec=own\n")
+    assert prune_stale(dst, keep={"gimp"}) == ["libreoffice-calc.desktop"]
+    assert sorted(p.name for p in dst.iterdir()) == ["gimp.desktop", "own.desktop"]
+
+
+def test_prune_on_missing_directory_is_a_no_op(tmp_path):
+    assert prune_stale(tmp_path / "yok", keep=set()) == []
 
 
 # --- komut satırı: başlatma ------------------------------------------------------------

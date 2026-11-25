@@ -6,7 +6,8 @@ kalır ve nefesd onları dondurmaz (dondurmamalı). nefes-baslat bir uygulamayı
 user@UID.service/app.slice altında kendi scope'una girer ve aday olabilir.
 
   nefes-baslat firefox-esr %u            # tek uygulama
-  nefes-baslat --desktop-install [ad…]   # menü/panel başlatıcılarını sarmala (~/.local/share/applications)
+  nefes-baslat --desktop-install         # menüdeki tüm uygulama kısayollarını sarmala (~/.local/share/applications)
+  nefes-baslat --desktop-install ad…     # yalnızca verilen kısayolları sarmala
   nefes-baslat --desktop-remove          # yalnızca nefes-baslat'ın yazdığı kopyaları sil
 
 Güvenlik: systemd-run ya da kullanıcı yöneticisi yoksa komut doğrudan çalıştırılır — uygulama
@@ -23,11 +24,10 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 MARKER = "X-Nefes-Baslat=true"
-DEFAULT_APPS = (
-    "firefox-esr", "firefox", "chromium", "thunderbird", "gimp",
-    "libreoffice-startcenter", "libreoffice-writer", "libreoffice-calc",
-    "libreoffice-impress", "libreoffice-draw",
-)
+# Masaüstü bileşenleri session scope'unda kalır (dondurulmaları masaüstünü dondururdu):
+# Xfce parçaları, Thunar (masaüstünün dosya yöneticisi servisi), panel ayarları,
+# ekran klavyesi (erişilebilirlik) ve Nefes'in kendisi.
+COMPONENT_PREFIXES = ("xfce", "xfwm", "xfdesktop", "thunar", "panel-preferences", "onboard", "nefes")
 SOURCE_DIRS = (Path("/usr/share/applications"), Path("/usr/local/share/applications"))
 
 
@@ -80,6 +80,36 @@ def install_desktop_files(source_dirs: Iterable[Path], target_dir: Path,
             target.write_text(rewrite_desktop(source.read_text(encoding="utf-8"), launcher), encoding="utf-8")
             result[name] = "kuruldu"
     return result
+
+
+def menu_apps(source_dirs: Iterable[Path]) -> tuple[str, ...]:
+    """Menüde görünen, sarmalanabilir uygulama kısayollarının adları (sıralı).
+
+    XDG kuralı: aynı ad birden çok dizinde varsa ilk (öncelikli) dizindeki kayıt geçerlidir.
+    Atlananlar: uygulama olmayanlar, NoDisplay/Hidden, Exec'siz, Terminal=true, masaüstü bileşenleri.
+    """
+    seen: dict[str, bool] = {}
+    for directory in source_dirs:
+        directory = Path(directory)
+        if not directory.is_dir():
+            continue
+        for path in directory.glob("*.desktop"):
+            if path.stem not in seen:
+                seen[path.stem] = _is_menu_app(path)
+    return tuple(sorted(name for name, ok in seen.items() if ok))
+
+
+def prune_stale(target_dir: Path, keep: set[str]) -> list[str]:
+    """Artık sarmalanmayacak (ör. kaldırılmış uygulama) kendi kopyalarımızı siler."""
+    target_dir = Path(target_dir)
+    if not target_dir.is_dir():
+        return []
+    removed = []
+    for path in sorted(target_dir.glob("*.desktop")):
+        if path.stem not in keep and _is_ours(path):
+            path.unlink()
+            removed.append(path.name)
+    return removed
 
 
 def remove_desktop_files(target_dir: Path) -> list[str]:
@@ -137,6 +167,36 @@ def _is_ours(path: Path) -> bool:
         return False
 
 
+def _desktop_entry(text: str) -> dict[str, str] | None:
+    """[Desktop Entry] grubunun anahtar=değer çiftleri; grup yoksa None."""
+    fields: dict[str, str] = {}
+    in_group = found = False
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            in_group = line == "[Desktop Entry]"
+            found = found or in_group
+        elif in_group and "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            fields.setdefault(key.strip(), value.strip())
+    return fields if found else None
+
+
+def _is_menu_app(path: Path) -> bool:
+    if path.stem.lower().startswith(COMPONENT_PREFIXES):
+        return False
+    try:
+        fields = _desktop_entry(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return False
+    return (fields is not None
+            and fields.get("Type") == "Application"
+            and bool(fields.get("Exec"))
+            and fields.get("NoDisplay", "false").lower() != "true"
+            and fields.get("Hidden", "false").lower() != "true"
+            and fields.get("Terminal", "false").lower() != "true")
+
+
 def _user_manager_up() -> bool:
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
     return Path(runtime, "systemd", "private").exists()
@@ -153,8 +213,12 @@ def _default_launcher(which: Callable[[str], str | None]) -> str:
 
 def _cli_install(names: list[str], which: Callable[[str], str | None]) -> int:
     launcher = _default_launcher(which)
-    result = install_desktop_files(SOURCE_DIRS, _target_dir(), names or DEFAULT_APPS, launcher)
+    wanted = names or menu_apps(SOURCE_DIRS)
+    result = install_desktop_files(SOURCE_DIRS, _target_dir(), wanted, launcher)
     for name, status in result.items():
         print(f"{name}: {status}")
+    if not names:  # tüm menü kipi: kaldırılmış uygulamaların eski kopyaları menüde kalmasın
+        for name in prune_stale(_target_dir(), keep=set(wanted)):
+            print(f"eski kopya silindi: {name}")
     print(f"başlatıcı: {launcher}")
     return 0
