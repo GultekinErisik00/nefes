@@ -8,6 +8,7 @@ from nefes_agent.gorunum import (
     event_line,
     format_duration,
     format_mb,
+    load_impact,
     sparkline,
     tray_state,
 )
@@ -74,3 +75,16 @@ def test_app_choice_reads_name_and_scope_program_name():
     wrapped = "[Desktop Entry]\nName=Firefox\nExec=/usr/bin/nefes-baslat /usr/lib/firefox-esr/firefox-esr %u\n"
     assert app_choice(wrapped) == ("Firefox", "firefox-esr")  # sarmalayıcı atlanır
     assert app_choice("[Desktop Entry]\nName=Y\n") is None
+
+
+@pytest.mark.parametrize("used_mb, total_mb, expected", [
+    (0, 2000, "Az"),
+    (99, 2000, "Az"),       # %4.95 < %5
+    (100, 2000, "Orta"),    # %5.0
+    (299, 2000, "Orta"),    # %14.95 < %15
+    (300, 2000, "Çok"),     # %15.0
+    (800, 2000, "Çok"),     # %40.0
+    (100, 0, "Az"),         # toplam bellek bilinmiyorsa güvenli varsayılan
+])
+def test_load_impact_classifies_ram_share(used_mb, total_mb, expected):
+    assert load_impact(used_mb * MB, total_mb * MB) == expected

@@ -22,10 +22,10 @@ from gi.repository import GLib, Gtk, Pango  # noqa: E402
 import nefes_ayar  # noqa: E402
 from nefes_agent import display_name  # noqa: E402
 from nefes_agent.gorunum import (  # noqa: E402
-    LEVEL_TEXT, app_choice, event_line, format_duration, format_mb, sparkline,
+    LEVEL_TEXT, app_choice, event_line, format_duration, format_mb, load_impact, sparkline,
 )
 from nefes_agent.istemci import Model, NefesClient  # noqa: E402
-from nefes_agent.sistem import read_memory  # noqa: E402
+from nefes_agent.sistem import read_memory, read_running_apps  # noqa: E402
 from nefes_ayar import MAX_FROZEN_CHOICES_MIN, Settings  # noqa: E402
 
 log = logging.getLogger("nefes-agent")
@@ -88,6 +88,21 @@ class Window(Gtk.ApplicationWindow):
         empty.show()  # GTK 3'te get_placeholder yok; yer tutucu kendi başına gösterilmeli
         self._frozen.set_placeholder(empty)
         box.pack_start(self._frozen, False, False, 0)
+
+        box.pack_start(Gtk.Separator(), False, False, 0)
+        box.pack_start(_section("Açık uygulamalar"), False, False, 0)
+        self._running = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        no_running = Gtk.Label(label="Nefes kapsamında açık uygulama yok.", xalign=0)
+        no_running.show()
+        self._running.set_placeholder(no_running)
+        scroll = Gtk.ScrolledWindow(
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            propagate_natural_height=True,
+            max_content_height=140,
+        )
+        scroll.add(self._running)
+        box.pack_start(scroll, False, False, 0)
 
         box.pack_start(Gtk.Separator(), False, False, 0)
         box.pack_start(_section("Son olaylar"), False, False, 0)
@@ -205,6 +220,23 @@ class Window(Gtk.ApplicationWindow):
         if zram is not None:
             text += f"   ·   zram {format_mb(zram[0])} → {format_mb(zram[1])}"
         self._memory.set_text(text)
+        self._refresh_running(total)
+
+    def _refresh_running(self, total_ram: int) -> None:
+        for child in self._running.get_children():
+            self._running.remove(child)
+        for _cgroup, name, nbytes, is_frozen in read_running_apps():
+            if is_frozen:
+                continue
+            row = Gtk.Box(spacing=10, margin=2)
+            left = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+            left.set_text(display_name(name))
+            right = Gtk.Label(xalign=1)
+            right.set_text(f"{format_mb(nbytes)}  ·  Yük: {load_impact(nbytes, total_ram)}")
+            row.pack_start(left, True, True, 0)
+            row.pack_end(right, False, False, 0)
+            self._running.add(row)
+        self._running.show_all()
 
     # --- ayarlar -------------------------------------------------------------------------
     def _load_settings(self) -> None:

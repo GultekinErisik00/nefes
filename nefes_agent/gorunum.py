@@ -91,3 +91,15 @@ def app_choice(desktop_text: str) -> tuple[str, str] | None:
         return None
     program = normalize_name(Path(argv[0]).name)
     return (fields.get("Name") or program, program) if program else None
+
+
+def load_impact(memory_bytes: int, total_ram_bytes: int) -> str:
+    """Uygulamanın toplam RAM'e göre bellek yükü etkisi: Az (<%5), Orta (%5–%15), Çok (≥%15)."""
+    if total_ram_bytes <= 0 or memory_bytes <= 0:
+        return "Az"
+    share = memory_bytes / total_ram_bytes
+    if share >= 0.15:
+        return "Çok"
+    if share >= 0.05:
+        return "Orta"
+    return "Az"
