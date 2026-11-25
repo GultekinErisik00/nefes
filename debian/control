@@ -15,10 +15,12 @@ Depends: ${misc:Depends},
          python3 (>= 3.11),
          python3-gi,
          gir1.2-glib-2.0,
+         gir1.2-gtk-3.0,
          gir1.2-notify-0.7,
          python3-xlib,
          systemd,
          systemd-zram-generator
+Recommends: gir1.2-ayatanaappindicator3-0.1
 Description: Pardus için donma önleyici bellek baskısı yöneticisi
  Nefes, bellek dolduğunda masaüstünün donmasını önler: odakta olmayan en büyük
  uygulamayı öldürmek yerine dondurur (cgroup.freeze), sayfalarını sıkıştırılmış
@@ -26,5 +28,5 @@ Description: Pardus için donma önleyici bellek baskısı yöneticisi
  gösterir. Hiçbir uygulama sonlandırılmaz.
  .
  Bileşenler: nefesd (PSI izleme + karar motoru, systemd kullanıcı servisi),
- nefes-agent (bildirim ajanı), nefes-baslat (uygulamaları kendi cgroup'unda
+ nefes-agent (bildirim, panel simgesi ve durum/ayar penceresi), nefes-baslat (uygulamaları kendi cgroup'unda
  başlatan sarmalayıcı), nefes-zram (RAM'e göre zram), nefes-olcum (ölçüm).

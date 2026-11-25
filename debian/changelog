@@ -1,3 +1,16 @@
+nefes (0.6.0) unstable; urgency=medium
+
+  * Arayüz (ADR-0004): nefes-agent'a panel simgesi (Ayatana) ve durum/ayar
+    penceresi; menüde "Nefes" kaydı.
+  * Ayar dosyası ~/.config/nefes/ayarlar.ini (nefes_ayar): hassasiyet, en uzun
+    donma, asla dondurulmayacak uygulamalar, bildirimler.
+  * D-Bus sözleşmesine eklemeler: GetStatus, SetEnabled, ReloadSettings,
+    RecentEvents, StatusChanged; duraklatma ("paused").
+  * nefes-baslat: menüdeki tüm uygulama kısayollarını sarmalar.
+  * Düzeltme: boşta baskı seviyesi "high"da takılı kalmıyor.
+
+ -- Gültekin Erişik <157842493+GultekinErisik@users.noreply.github.com>  Wed, 25 Nov 2026 21:00:00 +0300
+
 nefes (0.5.0) unstable; urgency=medium
 
   * İlk paket: nefesd, nefes-agent, nefes-baslat, nefes-zram, nefes-olcum.

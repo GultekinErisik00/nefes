@@ -1,5 +1,6 @@
 nefesd usr/lib/python3/dist-packages/
 nefes_agent usr/lib/python3/dist-packages/
+nefes_ayar usr/lib/python3/dist-packages/
 nefes_baslat usr/lib/python3/dist-packages/
 nefes_zram usr/lib/python3/dist-packages/
 nefes_olcum usr/lib/python3/dist-packages/
@@ -7,3 +8,5 @@ data/bin/* usr/bin/
 data/systemd/*.service usr/lib/systemd/user/
 data/autostart/nefes.desktop etc/xdg/autostart/
 nefesd/tr.edu.bil461.Nefes1.xml usr/share/dbus-1/interfaces/
+data/applications/nefes.desktop usr/share/applications/
+data/icons/*.svg usr/share/icons/hicolor/scalable/status/
