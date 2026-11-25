@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Nefes
+GenericName=Bellek baskısı yöneticisi
+Comment=Bellek dolduğunda donmayı önler; durum ve ayarlar
+Exec=nefes-agent --pencere
+Icon=nefes-normal
+Terminal=false
+Categories=System;Monitor;
+Keywords=bellek;ram;donma;zram;memory;
+StartupNotify=false

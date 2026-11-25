@@ -1,34 +1,29 @@
-"""python3 -m nefes_agent — oturum ajanı (Gio D-Bus + libnotify bağlantısı).
+"""python3 -m nefes_agent [--pencere] — oturum ajanı: bildirimler + panel simgesi + pencere (ADR-0004).
 
-Sözleşmeyi yalnızca XML dosyasından alır (importlib.resources ile nefesd paketinden): nefesd'nin
-kodunu içe aktarmaz. Gio.DBusProxy bu arayüz bilgisiyle kurulduğundan imzası sözleşmeye uymayan
-sinyaller Gio tarafından elenir.
+Tek örnekli Gtk.Application: menüden `nefes-agent --pencere` çalışan ajana iletilir ve penceresini
+öne getirir; ajan yoksa bu süreç ajan olur. Sözleşmeyi yalnızca XML dosyasından alır
+(nefes_agent.istemci): nefesd'nin kodunu içe aktarmaz.
 """
 from __future__ import annotations
 
 import logging
 import signal
 import sys
-from importlib.resources import files
+import time
 
 import gi
 
 gi.require_version("Gio", "2.0")
+gi.require_version("Gtk", "3.0")
 gi.require_version("Notify", "0.7")
-from gi.repository import Gio, GLib, Notify  # noqa: E402
+from gi.repository import Gio, GLib, Gtk, Notify  # noqa: E402
 
+import nefes_ayar  # noqa: E402
 from nefes_agent import Agent  # noqa: E402
+from nefes_agent.istemci import Model, NefesClient  # noqa: E402
 
 log = logging.getLogger("nefes-agent")
-BUS_NAME = "tr.edu.bil461.Nefes1"
-OBJECT_PATH = "/tr/edu/bil461/Nefes1"
-INTERFACE = "tr.edu.bil461.Nefes1.Manager"
-CALL_TIMEOUT_MS = 5000
-
-
-def contract_interface() -> Gio.DBusInterfaceInfo:
-    xml = (files("nefesd") / "tr.edu.bil461.Nefes1.xml").read_text(encoding="utf-8")
-    return Gio.DBusNodeInfo.new_for_xml(xml).lookup_interface(INTERFACE)
+APP_ID = "tr.edu.bil461.NefesAgent"
 
 
 class LibnotifyNotifier:
@@ -62,72 +57,90 @@ class LibnotifyNotifier:
                 pass  # kullanıcı zaten kapatmış
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    if not Notify.init("Nefes"):
-        log.error("bildirim sistemi başlatılamadı")
-        return 1
-    proxy = Gio.DBusProxy.new_for_bus_sync(
-        Gio.BusType.SESSION,
-        Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES | Gio.DBusProxyFlags.DO_NOT_AUTO_START,
-        contract_interface(), BUS_NAME, OBJECT_PATH, INTERFACE, None,
-    )
+class NefesApp(Gtk.Application):
+    def __init__(self) -> None:
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self._window = None
 
-    def resume(cgroup, done) -> None:
-        def finished(px, result):
-            try:
-                (resumed,) = px.call_finish(result).unpack()
-            except GLib.Error as exc:
-                log.warning("Resume başarısız: %s", exc.message)
-                resumed = False
-            done(resumed)
+    def do_startup(self) -> None:
+        Gtk.Application.do_startup(self)
+        if not Notify.init("Nefes"):
+            log.error("bildirim sistemi başlatılamadı; yalnızca simge ve pencere çalışacak")
+        self.settings_path = nefes_ayar.config_path()
+        self.model = Model()
+        self.client = NefesClient()
+        self.agent = Agent(LibnotifyNotifier(), self.client.resume,
+                           notifications_enabled=lambda: nefes_ayar.load(self.settings_path)[0].notifications)
+        self._wire()
+        from nefes_agent.simge import Tray
+        self.tray = Tray.create(self.model, self.client, self.show_window, self.set_enabled)
+        GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGTERM, self._stop)
+        GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, self._stop)
+        self.hold()  # pencere yokken de yaşa
+        log.info("nefes-agent başladı (simge: %s)", "var" if self.tray else "yok")
 
-        proxy.call("Resume", GLib.Variant("(s)", (cgroup,)), Gio.DBusCallFlags.NONE,
-                   CALL_TIMEOUT_MS, None, finished)
+    def do_command_line(self, command_line) -> int:
+        if "--pencere" in command_line.get_arguments()[1:]:
+            self.show_window()
+        return 0
 
-    agent = Agent(LibnotifyNotifier(), resume)
+    def do_activate(self) -> None:
+        self.show_window()
 
-    def on_signal(_proxy, _sender, name, params) -> None:
-        if name == "AppFrozen":
-            agent.on_frozen(*params.unpack())
-        elif name == "AppResumed":
-            agent.on_resumed(*params.unpack())
+    def show_window(self) -> None:
+        if self._window is None:
+            from nefes_agent.pencere import Window
+            self._window = Window(self, self.model, self.client, self.settings_path, self.set_enabled)
+        self._window.present()
 
-    proxy.connect("g-signal", on_signal)
+    def set_enabled(self, enabled: bool) -> None:
+        """Duraklat/sürdür: önce dosyaya (kalıcı, tek yazar ajan), sonra nefesd'ye (anında)."""
+        try:
+            nefes_ayar.update(self.settings_path, enabled=enabled)
+        except OSError as exc:
+            log.warning("ayar dosyası yazılamadı: %s", exc)
+        self.client.set_enabled(enabled)
 
-    def appeared(_conn, _name, _owner) -> None:
-        log.info("nefesd göründü; donuk uygulamalar eşitleniyor")
+    def _wire(self) -> None:
+        client, model, agent = self.client, self.model, self.agent
 
-        def listed(px, result):
-            try:
-                (apps,) = px.call_finish(result).unpack()
-            except GLib.Error as exc:
-                log.warning("ListFrozen başarısız: %s", exc.message)
-                return
-            agent.sync(apps)
+        def frozen(cgroup, name, nbytes) -> None:
+            model.on_frozen(cgroup, name, nbytes, time.monotonic())
+            agent.on_frozen(cgroup, name, nbytes)
 
-        proxy.call("ListFrozen", None, Gio.DBusCallFlags.NONE, CALL_TIMEOUT_MS, None, listed)
+        def resumed(cgroup, reason) -> None:
+            model.on_resumed(cgroup)
+            agent.on_resumed(cgroup, reason)
 
-    def vanished(_conn, _name) -> None:
-        log.info("nefesd yok; bildirimler kapatılıyor")
-        agent.on_service_vanished()
+        def appeared() -> None:
+            log.info("nefesd göründü; durum eşitleniyor")
+            model.on_appeared()
+            client.list_frozen(lambda apps: apps is not None and (
+                model.sync(apps, time.monotonic()), agent.sync(apps)))
+            client.get_status(lambda st: st is not None and model.on_status(st[0], st[1]))
 
-    watch = Gio.bus_watch_name(Gio.BusType.SESSION, BUS_NAME, Gio.BusNameWatcherFlags.NONE,
-                               appeared, vanished)
-    loop = GLib.MainLoop()
+        def vanished() -> None:
+            log.info("nefesd yok; bildirimler kapatılıyor")
+            model.on_vanished()
+            agent.on_service_vanished()
 
-    def stop() -> bool:
-        agent.on_service_vanished()
-        loop.quit()
+        client.on_frozen.append(frozen)
+        client.on_resumed.append(resumed)
+        client.on_status.append(model.on_status)
+        client.on_appeared.append(appeared)
+        client.on_vanished.append(vanished)
+
+    def _stop(self) -> bool:
+        self.agent.on_service_vanished()
+        self.client.close()
+        Notify.uninit()
+        self.quit()
         return GLib.SOURCE_REMOVE
 
-    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGTERM, stop)
-    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, stop)
-    log.info("nefes-agent başladı")
-    loop.run()
-    Gio.bus_unwatch_name(watch)
-    Notify.uninit()
-    return 0
+
+def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    return NefesApp().run(sys.argv)
 
 
 if __name__ == "__main__":

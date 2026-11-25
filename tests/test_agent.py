@@ -134,3 +134,15 @@ def test_service_vanishing_closes_every_notification():
     agent.on_frozen(CALC, "libreoffice", MB)
     agent.on_service_vanished()
     assert notifier.shown == {}
+
+
+def test_agent_does_not_notify_when_notifications_are_disabled():
+    notifier, resume = FakeNotifier(), FakeResume()
+    enabled = [False]
+    agent = Agent(notifier, resume, notifications_enabled=lambda: enabled[0])
+    agent.on_frozen(FIREFOX, "firefox-esr", 423 * MB)
+    agent.on_resumed(FIREFOX, "user")
+    assert notifier.shown == {} and notifier.closed == []
+    enabled[0] = True  # açılınca sonraki dondurma yine bildirilir
+    agent.on_frozen(CALC, "libreoffice", 300 * MB)
+    assert list(notifier.shown) == [CALC]

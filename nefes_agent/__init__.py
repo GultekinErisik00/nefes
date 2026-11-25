@@ -47,13 +47,17 @@ def frozen_message(app_name: str, memory_bytes: int) -> tuple[str, str]:
 
 
 class Agent:
-    def __init__(self, notifier: Notifier, resume: ResumeCall) -> None:
+    def __init__(self, notifier: Notifier, resume: ResumeCall,
+                 notifications_enabled: Callable[[], bool] = lambda: True) -> None:
         self._notifier = notifier
+        self._notifications_enabled = notifications_enabled
         self._resume = resume
         self._open: set[str] = set()
         self._pending: set[str] = set()
 
     def on_frozen(self, cgroup: str, app_name: str, memory_bytes: int) -> None:
+        if not self._notifications_enabled():  # ayar: bildirim kapalı (simge/pencere yine gösterir)
+            return
         summary, body = frozen_message(app_name, memory_bytes)
         self._notifier.show(cgroup, summary, body, lambda: self._clicked(cgroup))
         self._open.add(cgroup)
