@@ -37,3 +37,6 @@ graphify-out/
 
 # Ölçüm ham verisi (yerelde/VM'de kalır; özet tablolar notlara yazılır)
 olcumler/
+
+# Oturum devri için geçici not
+HANDOFF.md

@@ -7,8 +7,10 @@ Beklenen değerler elle hesaplanmış sabitlerdir.
 import pytest
 
 from nefes_olcum import (
+    KILLED_FILE,
     Probe,
     Summary,
+    mean_sd,
     percentile,
     psi_header,
     psi_row,
@@ -104,3 +106,28 @@ def test_run_directory_round_trip_gives_the_same_summary(tmp_path):
     assert result["prob"] == Summary(100, 600.0, 2500.0, 2.5)
     assert result["psi_some_avg10_max"] == 35.2
     assert result["psi_full_avg10_max"] == 12.0
+
+
+# --- tekrarların özeti ve M3 ---------------------------------------------------------
+
+def test_mean_sd_uses_the_sample_standard_deviation():
+    mean, sd = mean_sd([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
+    assert mean == pytest.approx(5.0)
+    assert sd == pytest.approx(2.138, abs=1e-3)  # örneklem (n-1) sapması
+
+
+def test_mean_sd_of_a_single_run_has_zero_deviation():
+    assert mean_sd([3.5]) == (3.5, 0.0)
+
+
+def test_mean_sd_of_nothing_is_an_error():
+    with pytest.raises(ValueError):
+        mean_sd([])
+
+
+def test_run_summary_reads_killed_app_count_when_present(tmp_path):
+    write_probe_csv(tmp_path / "prob.csv", [(0.1, 0.0)])
+    write_psi_csv(tmp_path / "psi.csv", [])
+    assert summarize_run(tmp_path)["killed_apps"] is None  # dosya yok → bilinmiyor
+    (tmp_path / KILLED_FILE).write_text("2\n")
+    assert summarize_run(tmp_path)["killed_apps"] == 2

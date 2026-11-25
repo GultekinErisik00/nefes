@@ -23,6 +23,18 @@ M1_MAX_LIMIT_MS = 2000.0
 PROBE_FILE = "prob.csv"
 PSI_FILE = "psi.csv"
 PROBE_HEADER = ("t_s", "lateness_ms")
+KILLED_FILE = "olen_uygulama.txt"  # M3: senaryo sonunda hayatta olmayan arka plan uygulaması sayısı
+
+
+def mean_sd(values: Sequence[float]) -> tuple[float, float]:
+    """Tekrarların ortalaması ve örneklem standart sapması (n-1); tek tekrarda sapma 0."""
+    if not values:
+        raise ValueError("ortalaması alınacak değer yok")
+    mean = sum(values) / len(values)
+    if len(values) == 1:
+        return mean, 0.0
+    variance = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+    return mean, math.sqrt(variance)
 
 
 @dataclass(frozen=True)
@@ -102,10 +114,12 @@ def summarize_run(directory: Path) -> dict:
     directory = Path(directory)
     lateness = [float(r["lateness_ms"]) for r in _read_csv(directory / PROBE_FILE)]
     psi = list(_read_csv(directory / PSI_FILE))
+    killed_path = directory / KILLED_FILE
     return {
         "prob": summarize(lateness),
         "psi_some_avg10_max": max((float(r["some_avg10"]) for r in psi), default=0.0),
         "psi_full_avg10_max": max((float(r["full_avg10"]) for r in psi), default=0.0),
+        "killed_apps": int(killed_path.read_text().strip()) if killed_path.exists() else None,
     }
 
 

@@ -23,6 +23,7 @@ from nefes_olcum import (  # noqa: E402
     PROBE_FILE,
     PSI_FILE,
     Probe,
+    mean_sd,
     psi_row,
     summarize,
     summarize_run,
@@ -74,7 +75,9 @@ def record(out: Path, duration_s: float, interval_ms: int) -> int:
 
 
 def report(directories: list[Path]) -> int:
-    print(f"{'ölçüm':<28} {'örnek':>6} {'p99 ms':>8} {'maks ms':>8} {'M2 donma s':>10} {'M1':>5} {'PSI some maks':>13}")
+    print(f"{'ölçüm':<28} {'örnek':>6} {'p99 ms':>8} {'maks ms':>8} {'M2 donma s':>10} {'M1':>5} "
+          f"{'M3 ölen':>8} {'PSI some maks':>13}")
+    groups: dict[str, list[dict]] = {}
     for directory in directories:
         try:
             result = summarize_run(directory)
@@ -82,8 +85,25 @@ def report(directories: list[Path]) -> int:
             print(f"{str(directory):<28} okunamadı: {exc}")
             continue
         s = result["prob"]
+        killed = "-" if result["killed_apps"] is None else str(result["killed_apps"])
         print(f"{directory.name:<28} {s.samples:>6} {s.p99_ms:>8.0f} {s.max_ms:>8.0f} "
-              f"{s.freeze_total_s:>10.1f} {'✓' if s.meets_m1() else '✗':>5} {result['psi_some_avg10_max']:>13.1f}")
+              f"{s.freeze_total_s:>10.1f} {'✓' if s.meets_m1() else '✗':>5} {killed:>8} "
+              f"{result['psi_some_avg10_max']:>13.1f}")
+        groups.setdefault(directory.name.rstrip("/").rsplit("-", 1)[0], []).append(result)
+    if any(len(runs) > 1 for runs in groups.values()):
+        print(f"\n{'yapılandırma (ort. ± sapma)':<28} {'n':>3} {'p99 ms':>14} {'maks ms':>16} "
+              f"{'M2 donma s':>14} {'M3 ölen':>12} {'PSI some maks':>14}")
+        for name, runs in groups.items():
+            def stat(values, fmt):
+                mean, sd = mean_sd(values)
+                return f"{mean:{fmt}} ± {sd:{fmt}}"
+            killed = [r["killed_apps"] for r in runs if r["killed_apps"] is not None]
+            print(f"{name:<28} {len(runs):>3} "
+                  f"{stat([r['prob'].p99_ms for r in runs], '.0f'):>14} "
+                  f"{stat([r['prob'].max_ms for r in runs], '.0f'):>16} "
+                  f"{stat([r['prob'].freeze_total_s for r in runs], '.1f'):>14} "
+                  f"{stat(killed, '.1f') if killed else '-':>12} "
+                  f"{stat([r['psi_some_avg10_max'] for r in runs], '.1f'):>14}")
     return 0
 
 
